@@ -1,0 +1,2092 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Map Viewer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+.LegendItem {
+height: 20px; 
+}
+.SubLegendItem{
+height: 20px; 
+padding-left: 20px;
+}
+</style>
+
+<script src="https://unpkg.com/leaflet@1.0.2/dist/leaflet.js"></script>
+<script src="LeafletGeocoder/src/js/l.control.geosearch.js"></script>
+<script src="LeafletGeocoder/src/js/l.geosearch.provider.openstreetmap.js"></script>
+<link rel="stylesheet" href="LeafletGeocoder/src/css/l.geosearch.css" />
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.0/jquery.min.js"></script>
+<script src="javascript/papaparse.js"></script>
+<link href='https://fonts.googleapis.com/css?family=Raleway' rel='stylesheet' type='text/css'>
+
+<link rel="stylesheet" href="css/leaflet.css" />
+<!-- Latest compiled and minified CSS -->
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+
+<!-- Optional theme -->
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap-theme.min.css" integrity="sha384-rHyoN1iRsVXV4nD0JutlnGaslCJuC7uwjduW9SVrLvRYooPp2bWYgmgJQIXwl/Sp" crossorigin="anonymous">
+
+<!-- Latest compiled and minified JavaScript -->
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
+
+
+<script src="https://unpkg.com/leaflet@1.1.0/dist/leaflet.js"></script>
+
+<script src="javascript/jscolor.js"></script>
+
+<script src="javascript/rangeslider.js"></script>
+
+<link rel="stylesheet" href="css/main_newlayout.css" />
+
+</head>
+
+<body>
+<div id="mapframe">
+	<div class="header">
+		<img src="" class="logo" alt="Org Logo" id="logo">
+
+		<span id="title">Title </span> <button id ="editTitlebut" type="button" class="btn btn-info btn-xs" data-toggle="modal" data-target="#TitleModal" style="display:none;"><img src="image/edit.jpg"></button>
+		<br><br>
+	
+	</div>
+	<div class="buttonsandmap">
+		
+		<div id="buttons">
+			<button type="button" id="addDataButton" class="btn btn-info btn-lg" data-toggle="modal" data-target="#myModal" style="display:none;" onclick="clearFilesFromForm()">Add Data</button>
+			
+		</div>
+		<div>
+		<button id ="introHelp" type="button" class="btn btn-info btn-xs" data-toggle="modal" data-target="#IntroModal" style="display:none;"><b>&nbsp;?&nbsp;</b></button>		
+		</div>
+		<div id="map"></div>
+	</div>
+</div>
+<div id="datahold"></div>
+<script type="text/javascript" id="datascript"></script>
+<div id="test"></div>
+<script type="text/javascript">
+
+//DEFINE OBJECT TO HOLD Layers
+var userLayers = {}; 
+//current Dynamic Layers
+var cnumDynamicLayers = 0; 
+var cDynamicLayers = [];
+// cImportMultiColors = []; 
+var layerBeingModified = 0;
+
+//current File Name List
+var cfileNameList = [];
+
+//Count of items in legend
+var lgndCnt = 0;
+
+var MultiColorDefinitions = [];
+var MCItemNum = 0;
+
+var PromotedItem;
+var OrderList = []; 
+
+var CurrSessionSaved = 0; 
+var FoundMap = 0; 
+
+var reloadedGeoJsonData; 
+
+document.getElementById('map').style.height =  ($(window).height()-90)+"px"; 
+
+
+//DEFINE THE BASEMAP that will be used in the map. 
+    var mbAttr = 'SOURCES| Map data &copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors, ' +
+			'<a href="http://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>, ' +
+			'Imagery © <a href="http://mapbox.com">Mapbox</a>',
+		mbUrl = 'https://api.tiles.mapbox.com/v4/{id}/{z}/{x}/{y}.png?access_token=YOURACCESSTOKEN';
+
+
+	var light = L.tileLayer(mbUrl, {id: 'mapbox.light', attribution: mbAttr}),
+		dark = L.tileLayer(mbUrl, {id: 'mapbox.dark', attribution: mbAttr}), 
+		streets  = L.tileLayer(mbUrl, {id: 'mapbox.streets',   attribution: mbAttr}),
+		emerald  = L.tileLayer(mbUrl, {id: 'mapbox.emerald',   attribution: mbAttr}),
+		satellite = L.tileLayer(mbUrl, {id: 'mapbox.streets-satellite',   attribution: mbAttr});
+		
+
+//DEFINE THE MAP OBJECT THAT DISPLAYS THE GEOGRAPHIC DATA,
+//ADD the map extent, zoom level, and basemap (grayscale basemap) to the map
+    var map = L.map('map', {
+		center: [9.072264, 7.491302],
+		zoom: 3,
+		layers: [light]
+	});
+
+//PACKAGE the basemap and overly layers together. 
+	var baseLayers = {
+		"Grayscale": light,
+		"Dark": dark,
+		"Streets": streets,
+		"Emerald": emerald, 
+		"Satellite": satellite
+	};
+	var overlays = {
+		//"Bus Route": LineLayer,
+	};
+
+
+	
+	
+//ADD a Layers control. This will add a widget to the map that allows you to turn layers on and off. 
+    var layerControl = L.control.layers(baseLayers, overlays).addTo(map);  
+	
+
+							//LEGEND	
+							var legend = L.control({position: 'bottomleft'});
+
+							legend.onAdd = function (map) {
+
+								var Ldiv = L.DomUtil.create('div', 'info legend')
+									
+
+								//LEGEND CONTENT
+									Ldiv.innerHTML +=
+										'<div id="legendbanner">KEY</div><br><div id="Legendcontent"></div>';
+								
+
+								return Ldiv;
+							};
+
+							legend.addTo(map);
+							
+
+
+	</script>
+
+
+
+<!-- Add Data Modal -->
+<div id="myModal" class="modal fade" role="dialog">
+  <div class="modal-dialog">
+
+    <!-- Modal content-->
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal">&times;</button>
+        <h4 class="modal-title">Add CSV Data</h4>
+      </div>
+      <div class="modal-body">
+        <div class="">
+			<div id="modalcontent" class="col_md_12 text-center">
+				<div class="row">
+					<div class="col-md-3 col-md-offset-1">
+						<h2> Step 1</h2>
+					</div>
+					<div class="col-md-6">
+						<p> What type of data do you have?</p>
+							<label class="radio-inline"><input id="latlongopt" type="radio" name="optradio" onclick="loadlatlongForm()">Latitude/Longitude Coordinates</label>
+							<label class="radio-inline"><input id="adminopt" type="radio" name="optradio" value="Administrative Boundaries" onclick="loadAdminform()">Administrative Areas</label>
+					</div>
+				</div>
+			</div>
+		</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Save Map Modal -->
+<div id="myModal3" class="modal fade" role="dialog">
+  <div class="modal-dialog">
+
+    <!-- Modal content-->
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal">&times;</button>
+        <h4 class="modal-title">SAVE MAP</h4>
+      </div>
+      <div class="modal-body">
+        <div class="">
+			<div id="modalcontent" class="col_md_12 text-center">
+				<div class="row">
+				<div id="getSaveInfo">Please provide some information about yourself: <br><br>
+				What is Your Name: <input type="text" id="owner"><br><br>
+				What is Your Organization: <input type="text" id="ownerOrg"><br>
+				<i></i> <br><br>
+				Focus Country/Area: <select id="FocusCountry"><option value="missing">Please select</option><option value="GLB">Global/National-Level</option><option value="MDA">Moldova</option><option value="AFG">Afghanistan</option><option value="ALB">Albania</option><option value="AGO">Angola</option><option value="ARM">Armenia</option><option value="AZE">Azerbaijan</option><option value="BGD">Bangladesh</option><option value="BLR">Belarus</option><option value="BEN">Benin</option><option value="BIH">Bosnia and Herzegovina</option><option value="BWA">Botswana</option><option value="BRA">Brazil</option><option value="BFA">Burkina Faso</option><option value="BDI">Burundi</option><option value="CIV">Cote dIvoire</option><option value="KHM">Cambodia</option><option value="CMR">Cameroon</option><option value="CAF">Central African Republic</option><option value="TCD">Chad</option><option value="CHN">China</option><option value="COL">Colombia</option><option value="CUB">Cuba</option><option value="CYP">Cyprus</option><option value="COD">Democratic Republic of the Congo</option><option value="DJI">Djibouti</option><option value="DOM">Dominican Republic</option><option value="TLS">East Timor</option><option value="ECU">Ecuador</option><option value="EGY">Egypt</option><option value="SLV">El Salvador</option><option value="ETH">Ethiopia</option><option value="GEO">Georgia</option><option value="GHA">Ghana</option><option value="GTM">Guatemala</option><option value="GIN">Guinea</option><option value="GUY">Guyana</option><option value="HTI">Haiti</option><option value="HND">Honduras</option><option value="IND">India</option><option value="IDN">Indonesia</option><option value="IRQ">Iraq</option><option value="JAM">Jamaica</option><option value="JOR">Jordan</option><option value="KAZ">Kazakhstan</option><option value="KEN">Kenya</option><option value="KOV">Kosovo</option><option value="KGZ">Kyrgyzstan</option><option value="LAO">Laos</option><option value="LBN">Lebanon</option><option value="LSO">Lesotho</option><option value="LBR">Liberia</option><option value="MKD">Macedonia</option><option value="MDG">Madagascar</option><option value="MWI">Malawi</option><option value="MDV">Maldives</option><option value="MLI">Mali</option><option value="MRT">Mauritania</option><option value="MEX">Mexico</option><option value="MDA">Moldova</option><option value="MNG">Mongolia</option><option value="MNE">Montenegro</option><option value="MAR">Morocco</option><option value="MOZ">Mozambique</option><option value="MMR">Myanmar</option><option value="NAM">Namibia</option><option value="NPL">Nepal</option><option value="NIC">Nicaragua</option><option value="NER">Niger</option><option value="NGA">Nigeria</option><option value="PAK">Pakistan</option><option value="PSE">Palestina</option><option value="PAN">Panama</option><option value="PRY">Paraguay</option><option value="PER">Peru</option><option value="PHL">Philippines</option><option value="COG">Republic of Congo</option><option value="RWA">Rwanda</option><option value="SEN">Senegal</option><option value="SRB">Serbia</option><option value="SLE">Sierra Leone</option><option value="SOM">Somalia</option><option value="ZAF">South Africa</option><option value="SSD">South Sudan</option><option value="LKA">Sri Lanka</option><option value="SDN">Sudan</option><option value="SWZ">Swaziland</option><option value="SYR">Syria</option><option value="TJK">Tajikistan</option><option value="TZA">Tanzania</option><option value="THA">Thailand</option><option value="TUN">Tunisia</option><option value="TKM">Turkmenistan</option><option value="UGA">Uganda</option><option value="UKR">Ukraine</option><option value="UZB">Uzbekistan</option><option value="VEN">Venezuela</option><option value="VNM">Vietnam</option><option value="YEM">Yemen</option><option value="ZMB">Zambia</option><option value="ZWE">Zimbabwe</option></select><br><br>
+				Tell us a little about the map <i>(what does the map show?, what did you learn from making this map? how can it be used?)</i>: <br>
+				<textarea rows="6" cols="50" id="about"></textarea><br><br>
+				<button type="button" onclick="savemap()">Save Map</button></div>
+				
+				<div id="showSaveResults" style="display:none">
+				<p>Your map has been saved! Here are options for using this map in the future: </p>
+				<hr>
+				Provide this link to others to view this map without making edits: <a id="accesslink" href="" target="_blank"></a> <br><br>
+				<hr>
+				To <i>make additional edits</i> to this map in the future, go to: <a id="editlink" href="" target="_blank"></a> <br><br>. 
+				<hr>
+				To share this map <i>as a template</i> use the following link. Others can build upon this map, but no changes will be made to this specific map: <a id="templatelink" href="" target="_blank"></a> <br><br>.
+				<hr>
+				PLEASE SAVE these URLs for future use! Thank you. 
+				</div>
+					
+				</div>
+						
+						
+					  
+				</div>
+			</div>
+		</div>
+		<div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+		</div>
+      </div>
+      
+    </div>
+</div>
+<!-- Change Title Modal -->
+<div id="TitleModal" class="modal fade" role="dialog">
+  <div class="modal-dialog">
+
+    <!-- Modal content-->
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal">&times;</button>
+        <h4 class="modal-title">CHANGE MAP TITLE</h4>
+      </div>
+      <div class="modal-body">
+        <div class="">
+			<div id="modalcontent" class="col_md_12 text-center">
+				<div class="row">
+					<div class="col-md-12">
+						<p> <input id="modedMapTitle" class="form-control" type="text" value="TITLE"></p>			
+					</div>
+				</div>
+				<div class ="row">
+					<button onclick="ChangeTitle()" class="btn btn-primary">Update Title</button>
+				</div>
+			</div>
+			</div>
+		</div>
+		<div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+		</div>
+      </div>
+      
+    </div>
+</div>
+<!-- Intro/Help Modal -->
+<div id="IntroModal" class="modal fade" role="dialog">
+  <div class="modal-dialog">
+
+    <!-- Modal content-->
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal">&times;</button>
+        <h4 class="modal-title">WELCOME!</h4>
+      </div>
+      <div class="modal-body">
+        <div class="">
+			<div id="modalcontent" class="col_md_12 text-center">
+				<div class="row">
+					<div class="col-md-12">
+						<b>Thanks for using this application. </b><br><br>
+						This application allows individuals to create, save, and share basic maps using their own data.<br><br>
+						<b>Creating your own data?</b> We strongly suggest using our <a href="templates.html" target="_blank"><b>standard templates.</b></a> <br>
+						<b>Need More Information?</b> Check out our in-depth <a href="HelpDOC.pdf" target="_blank">Help Document</a>.
+		
+					</div>
+				</div>
+				<div class ="row">
+					
+				</div>
+			</div>
+			</div>
+		</div>
+		<div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+		</div>
+      </div>
+      
+    </div>
+</div>
+<div id="ResultsModal" class="modal fade" role="dialog">
+  <div class="modal-dialog">
+
+    <!-- Modal content-->
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal">&times;</button>
+        <h4 class="modal-title">Add Data Results</h4>
+      </div>
+      <div class="modal-body" id="modalBodyResults" style="overflow:scroll;">
+        <div class="">
+			<div id="modalcontent" class="col_md_12 text-center">
+				<div id="ResultsDetails"></div>
+			</div>
+			</div>
+		</div>
+		<div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+		</div>
+      </div>
+      
+    </div>
+</div>
+
+
+	
+<!-- Modal Map Mods -->
+<div id="myModalMapMods" class="modal fade" role="dialog">
+  <div class="modal-dialog">
+
+    <!-- Modal content-->
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal">&times;</button>
+        <h4 class="modal-title">Make Map Modifications</h4>
+      </div>
+      <div class="modal-body">
+			<div id="modalcontent" class="col_md_12 text-center">
+						
+				<div class="row">
+					<div id="ColorModDiv" style="padding: 50px;">	
+					
+					<p>Change Layer Name<br>
+					<input id="modedDisplayName" type="text" value="Generic Layer Name"><br><br>
+					
+					<button onclick="BringLyrFront()" class="btn btn-primary">Bring Layer to Top</button><br><br>
+					
+					Label This Layer?&nbsp; <input type="checkbox" id="ShowLabel" value="Yes"> &nbsp;&nbsp;<abbr title="If checked, labels will appear for features in this layer. Label text will come from one of the following data fields: label, NAME_2, NAME_1. To add custom label text to a map, create a field called 'label' in your CSV file, populate it with the text that you wish to have displayed for each feature, and re-import the CSV file to the map."><b>(info)</b></abbr><br><br>
+					
+					
+						</p> <b>Change the color for <span id='layerNameStyMod'></span> </b><br>
+						using: <select id="ColorType" onchange="changeColorForm()"> 
+						<option value="OneColor">One Color</option>
+						<option value="ColorCategory">Multiple Colors Based on Data Category (text)</option>
+						<option value="ColorRange">Multiple Colors Based on Data Range (Number)</option>
+						</select>
+						<div id="colorFieldSelector" style="display:none">
+						<br><br>
+						Field Containing the Data: <select id="FieldName"> 
+						</select>
+						</div>
+						<br>
+						<div id="categoryColorSelector" style="display:none">
+						<table>
+						<tr><td>Data Value</td><td>&nbsp;=&nbsp;</td><td><input type="text" id="Cat1"></td><td>&nbsp;&nbsp;</td><td><input id="Cat1Color" class="jscolor"></td></tr>
+						<tr><td>Data Value</td><td>&nbsp;=&nbsp;</td><td><input type="text" id="Cat2"></td><td>&nbsp;&nbsp;</td><td><input id="Cat2Color" class="jscolor"></td></tr>
+						<tr><td>Data Value</td><td>&nbsp;=&nbsp;</td><td><input type="text" id="Cat3"></td><td>&nbsp;&nbsp;</td><td><input id="Cat3Color" class="jscolor"></td></tr>
+						<tr><td>Data Value</td><td>&nbsp;=&nbsp;</td><td><input type="text" id="Cat4"></td><td>&nbsp;&nbsp;</td><td><input id="Cat4Color" class="jscolor"></td></tr>
+						<tr><td>Data Value</td><td>&nbsp;=&nbsp;</td><td><input type="text" id="Cat5"></td><td>&nbsp;&nbsp;</td><td><input id="Cat5Color" class="jscolor"></td></tr>
+						</table>
+						</div>
+						<div id="rangeColorSelector" style="display:none">
+						<br><br>
+						<table>
+						<tr><td>Data Value is Between&nbsp;</td><td><input type="text" size="6" id="Rng1Low"></td><td>&nbsp;and&nbsp;</td><td><input type="text" size="6" id="Rng1High"></td><td>&nbsp;&nbsp;</td><td><input id="Rng1Color" class="jscolor" value="fef0d9"></td></tr>
+						<tr><td>Data Value is Between&nbsp;</td><td><input type="text" size="6" id="Rng2Low"></td><td>&nbsp;and&nbsp;</td><td><input type="text" size="6" id="Rng2High"></td><td>&nbsp;&nbsp;</td><td><input id="Rng2Color" class="jscolor" value="fdcc8a"></td></tr>
+						<tr><td>Data Value is Between&nbsp;</td><td><input type="text" size="6" id="Rng3Low"></td><td>&nbsp;and&nbsp;</td><td><input type="text" size="6" id="Rng3High"></td><td>&nbsp;&nbsp;</td><td><input id="Rng3Color" class="jscolor" value="fc8d59"></td></tr>
+						<tr><td>Data Value is Between&nbsp;</td><td><input type="text" size="6" id="Rng4Low"></td><td>&nbsp;and&nbsp;</td><td><input type="text" size="6" id="Rng4High"></td><td>&nbsp;&nbsp;</td><td><input id="Rng4Color" class="jscolor" value="e34a33"></td></tr>
+						<tr><td>Data Value is Between&nbsp;</td><td><input type="text" size="6" id="Rng5Low"></td><td>&nbsp;and&nbsp;</td><td><input type="text" size="6" id="Rng5High"></td><td>&nbsp;&nbsp;</td><td><input id="Rng5Color" class="jscolor" value="b30000"></td></tr>
+						</table>
+						</div>						
+						<br>
+						<span id="mainColorLabel">Color:</span> <input id="currColor" class="jscolor" value="ffffff"> &nbsp; <input type="checkbox" id="ShowDefault" value="Yes" checked> show? <br>
+						
+						<br>
+						Layer Transparency: <br>
+						<div style="width:100%" align="center"> <div style="width:300px" align="center"><table><tr><td>Fully Visible</td><td><input id="tranSel" type="range" min="0" max="95" value="30"></td><td>99% Transparent</td></tr></table></div></div>
+						<br>
+						
+						<button onclick="makeMapMods()" class="btn btn-primary">Update Map</button>
+					</div>	
+
+				</div>
+				
+			</div>
+		</div>
+      
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+      </div>
+    </div>
+
+  </div>
+</div>	
+
+<!-- Download Modal -->
+<div id="Downloadmodal" class="modal fade" role="dialog">
+  <div class="modal-dialog">
+
+    <!-- Modal content-->
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal">&times;</button>
+        <h4 class="modal-title">Download Data</h4>
+      </div>
+      <div class="modal-body">
+			<div id="modalcontent" class="col_md_12 text-center">
+				<div class="row">
+					<p>Select the layer(s) you wish to download</p>
+						<ul class="list-group" id="downloadlist">
+						</ul>					
+				</div>
+			</div>
+	   </div>
+	
+		<div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+		</div>
+	</div>
+  </div>
+</div>
+	
+<div id="accesslink"></div>
+
+
+
+<div id="dataGIS"></div>
+<script id='geojson'></script>
+
+<script>
+		
+		//ESTABLISH IF loading and existing map (has URLID) and a MapID for saving the map. 
+		//If existing map, and in EDIT mode, set MapID to URLID so that URLID remains the same on save. 
+		//Otherwise, a new MapID will be used. 
+		var urlid= String(window.location.search);
+		urlid = urlid.substr(1,5);
+		var urlidType= String(window.location.search).substr(6); 
+		console.log(urlid);
+		console.log(urlidType);
+		
+		//Generate a new MapID. While statement used to ensure a five digit number is generated, and first number is not equal to 1. If first number equals one, an error seems to occur. 
+		var mapid = (0|Math.random()*9e6).toString(36);
+			console.log(mapid.substring(0,1));
+			console.log(mapid.length); 
+			var i = 0;
+			while (i < 20) {
+				if (mapid.length != 5){
+					mapid = (0|Math.random()*9e6).toString(36);
+				}
+				else if (mapid.substring(0,1)==1){
+					mapid = (0|Math.random()*9e6).toString(36);
+				}
+				else{
+				break; 
+				}
+				console.log("Retrieving Map ID");
+				if (i==19){
+					alert("An error occured while generating your Map ID, and your map cannot be saved at this time. Please report this issue.");
+				}
+				i++;
+		}
+		
+		//If in view mode, Add Data buttons remains invisible. Can only view the map. 
+		//Otherwise, Add Data button appears. 
+		if(urlidType != "view"){
+			document.getElementById('addDataButton').style.display = 'inline'; 
+			document.getElementById('editTitlebut').style.display = 'inline'; 
+			document.getElementById('introHelp').style.display = 'inline';
+			$("#IntroModal").modal();
+		}
+		//If existing map, load existing map. 	
+		if(urlid){
+			//if in edit mode, keep the mapID persistent with loaded MapID. 
+			if(urlidType=="edit"){
+				mapid = urlid; 
+			}
+		loadExistingMap();	
+		}
+		
+
+	//When the save modal window is closed, check to see if a map has been saved, and if the user is in template mode (actually NOT edit mode is checked). If so, open the new map in edit mode so the user can continue building on the new map. Otherwise, a user would be continuing to build on the old template, and multiple iterations of a map may be saved.  
+	$("#myModal3").on('hide.bs.modal', function () {
+		console.log('The save dialog is closing.');
+		if(CurrSessionSaved==1&&urlidType != "edit"){
+			console.log("Page is shifting to new edit link."); 
+			window.location.assign(editlink);
+		}			
+	});
+
+	//<option value="_adm3.geojson">3rd Level Administrative Areas (i.e. Sub-Districts)</option>
+	
+	// --------------------- MAJOR FUNCTION: Loads the Admin Boundary Add Data Form ------------
+	//Approximately line 440 - 575
+	//Load the form that allows a person to join data to Administrative Boundary units. 
+	function loadAdminform(){
+		document.getElementById('modalcontent').innerHTML='<div class="row"><div class="col-md-3 col-md-offset-1"><h2> Step 1</h2></div>			<div class="col-md-6"></p> What type of data do you have?</p><label class="radio-inline"><input id="latlongopt" type="radio" name="optradio" value="coordinates" onclick="loadlatlongForm()">Latitude/Longitude Coordinates</label><label class="radio-inline"><input id="adminopt" type="radio" name="optradio" value="Administrative Boundaries" onclick="loadAdminform()" checked>Administrative Areas</label>		</div></div><div class="row"><div class="col-md-3 col-md-offset-1"><h2> Step 2</h2></div><div class="col-md-6"><p>Select your country and the type of geographic areas represented by your data.</p>	Select Country:<select id="country"> <option value="missing">Please select</option><option value="GLB">Global/National-Level</option><option value="MDA">Moldova</option><option value="AFG">Afghanistan</option><option value="ALB">Albania</option><option value="AGO">Angola</option><option value="ARM">Armenia</option><option value="AZE">Azerbaijan</option><option value="BGD">Bangladesh</option><option value="BLR">Belarus</option><option value="BEN">Benin</option><option value="BIH">Bosnia and Herzegovina</option><option value="BWA">Botswana</option><option value="BRA">Brazil</option><option value="BFA">Burkina Faso</option><option value="BDI">Burundi</option><option value="CIV">Cote dIvoire</option><option value="KHM">Cambodia</option><option value="CMR">Cameroon</option><option value="CAF">Central African Republic</option><option value="TCD">Chad</option><option value="CHN">China</option><option value="COL">Colombia</option><option value="CUB">Cuba</option><option value="CYP">Cyprus</option><option value="COD">Democratic Republic of the Congo</option><option value="DJI">Djibouti</option><option value="DOM">Dominican Republic</option><option value="TLS">East Timor</option><option value="ECU">Ecuador</option><option value="EGY">Egypt</option><option value="SLV">El Salvador</option><option value="ETH">Ethiopia</option><option value="GEO">Georgia</option><option value="GHA">Ghana</option><option value="GTM">Guatemala</option><option value="GIN">Guinea</option><option value="GUY">Guyana</option><option value="HTI">Haiti</option><option value="HND">Honduras</option><option value="IND">India</option><option value="IDN">Indonesia</option><option value="IRQ">Iraq</option><option value="JAM">Jamaica</option><option value="JOR">Jordan</option><option value="KAZ">Kazakhstan</option><option value="KEN">Kenya</option><option value="KOV">Kosovo</option><option value="KGZ">Kyrgyzstan</option><option value="LAO">Laos</option><option value="LBN">Lebanon</option><option value="LSO">Lesotho</option><option value="LBR">Liberia</option><option value="MKD">Macedonia</option><option value="MDG">Madagascar</option><option value="MWI">Malawi</option><option value="MDV">Maldives</option><option value="MLI">Mali</option><option value="MRT">Mauritania</option><option value="MEX">Mexico</option><option value="MDA">Moldova</option><option value="MNG">Mongolia</option><option value="MNE">Montenegro</option><option value="MAR">Morocco</option><option value="MOZ">Mozambique</option><option value="MMR">Myanmar</option><option value="NAM">Namibia</option><option value="NPL">Nepal</option><option value="NIC">Nicaragua</option><option value="NER">Niger</option><option value="NGA">Nigeria</option><option value="PAK">Pakistan</option><option value="PSE">Palestina</option><option value="PAN">Panama</option><option value="PRY">Paraguay</option><option value="PER">Peru</option><option value="PHL">Philippines</option><option value="COG">Republic of Congo</option><option value="RWA">Rwanda</option><option value="SEN">Senegal</option><option value="SRB">Serbia</option><option value="SLE">Sierra Leone</option><option value="SOM">Somalia</option><option value="ZAF">South Africa</option><option value="SSD">South Sudan</option><option value="LKA">Sri Lanka</option><option value="SDN">Sudan</option><option value="SWZ">Swaziland</option><option value="SYR">Syria</option><option value="TJK">Tajikistan</option><option value="TZA">Tanzania</option><option value="THA">Thailand</option><option value="TUN">Tunisia</option><option value="TKM">Turkmenistan</option><option value="UGA">Uganda</option><option value="UKR">Ukraine</option><option value="UZB">Uzbekistan</option><option value="VEN">Venezuela</option><option value="VNM">Vietnam</option><option value="YEM">Yemen</option><option value="ZMB">Zambia</option><option value="ZWE">Zimbabwe</option></select><br><br>Geographic Areas Represented by Your Data:<select id="scale"> <option value="missing">Please select</option> <option value="_adm1.geojson">1st Level Administrative Areas (i.e. Provinces)</option> <option value="_adm2.geojson">2nd Level Administrative Areas (i.e. Districts)</option></select><br><span id="DataTemplateSpan"></span><br>			</div></div><div class="row"><div class="col-md-3 col-md-offset-1"><h2> Step 3</h2></div><div class="col-md-6"><p>Select your correctly formatted CSV file</p>	<form id="fileForm"><input type="file" id="file" accept=".csv" class="btn btn-primary"></form><br>			</div></div><div class="row"><div class="col-md-3 col-md-offset-1"><h2> Step 4</h2></div><div class="col-md-6"><p>Provide a short name for this data layer: <input type="text" id="inputLayerName2"><br><br> Select matching fields to join your csv to the boundary data. Then, click the button below to convert your data to a GIS ready format.</p>CSV Join ID: <br><select id="joinID"></select><br><br> Boundary Join ID: <br><select id="joinID2"></select> <br> <br><button onclick="checkMyFiles()" class="btn btn-primary">Add Data</button></div></div>'
+		
+		document.getElementById('file').onchange = function() {
+		
+			var t = document.getElementById("file").files[0].name;
+			
+			//Check to make sure file is CSV
+			console.log(t.substr(t.length - 4).toUpperCase());
+			if(t.substr(t.length - 4).toUpperCase() != ".CSV"){
+				alert("I'm sorry, your file is not in CSV format. Please save your data into a CSV file and try again.");
+				document.getElementById("fileForm").reset();
+				return; 
+			}
+		
+			//Check to make sure GeoJSON File doesn't already exist on the server
+			var filename = t.substr(0,t.length - 4);
+			filename = filename+"_"+mapid;
+			var GeoJSONFileCheckURL = "data/output/"+filename+".geojson";
+				$.ajax({
+				url:GeoJSONFileCheckURL,
+				type:'HEAD',
+				error: function()
+				{
+				//this.options[this.selectedIndex].text
+					console.log("File does not exist- this is good.");
+				},
+				success: function()
+				{	
+					alert("I'm sorry, your map is already using a file with the name "+document.getElementById("file").files[0].name+". Please rename this file to a different name and try again.");
+					document.getElementById("fileForm").reset();
+					$('#joinID').empty();
+					//AddJoinedAdminDataToMap(); 
+				}
+			});
+		
+		var x = document.getElementById("file").files[0];
+		var t= x.name
+		//console.log(t.substr(0,t.length - 4));
+		Papa.parse(x, {
+			header: true,
+			complete: function(results) {
+			
+				//console.log(results.meta.fields);
+				optionlist= results.meta.fields
+				csvID = document.getElementById("joinID")
+				$('#joinID').empty();
+				op1= document.createElement('option');
+				op1.value = "missing";
+				op1.innerHTML = "Please select";
+				csvID.appendChild(op1);
+				for (i = 0; i < optionlist.length; i++) { 
+					if (/\s/.test(optionlist[i])) {
+						alert('Error: Your CSV file has a column named "'+optionlist[i]+'" that contains spaces.\n Please remove any spaces from field names in the file, save the file, and try again.');
+						document.getElementById("fileForm").reset();
+						$('#joinID').empty();						
+						return; 
+					}
+					else if(/^[a-zA-Z0-9_]*$/.test(optionlist[i]) == false) {
+						alert('Error: Your CSV file has a column named "'+optionlist[i]+'" that contains special characters like $ or & or -.\n Please only use letters, numbers, and the underscore (_) in your field names.');
+						document.getElementById("fileForm").reset();
+						$('#joinID').empty();						
+						return;
+					}
+					op1= document.createElement('option');
+					op1.value = optionlist[i];
+					op1.innerHTML = optionlist[i];
+					csvID.appendChild(op1);
+				}
+							
+				}
+			});
+		}
+		
+		document.getElementById('country').onchange = function() {
+			document.getElementById("joinID2").options.length = 0; 
+			if(document.getElementById("country").value == "GLB"){
+				document.getElementById("scale").options.length = 0; 
+				polyID = document.getElementById("scale");
+				op2 = document.createElement('option');
+				op2.value = "missing";
+				op2.innerHTML = "Please select";
+				polyID.appendChild(op2);
+				op2 = document.createElement('option');
+				op2.value = "_adm0.geojson";
+				op2.innerHTML = "National-Level";
+				polyID.appendChild(op2);
+			}
+			else{
+				document.getElementById("scale").options.length = 0; 
+				polyID = document.getElementById("scale");
+				op2 = document.createElement('option');
+				op2.value = "missing";
+				op2.innerHTML = "Please select";
+				polyID.appendChild(op2);
+				op2 = document.createElement('option');
+				op2.value = "_adm1.geojson";
+				op2.innerHTML = "1st Level Administrative Areas (i.e. Provinces)";
+				polyID.appendChild(op2);
+				op2 = document.createElement('option');
+				op2.value = "_adm2.geojson";
+				op2.innerHTML = "2nd Level Administrative Areas (i.e. Districts)";
+				polyID.appendChild(op2);
+			}
+		}
+		
+		//DEFINES WHICH FILE BOUNDARY FILE TO BRING IN
+		document.getElementById('scale').onchange = function() {
+			if(document.getElementById("country").value == "missing" && document.getElementById('scale').value != "missing"){
+				alert("Please select your country first"); 
+				document.getElementById('scale').value = "missing"; 
+				return;  
+			}
+			loadJoinIDList();
+		}		
+		
+		//Load the list of Boundary Columns that a user can join their data to. 
+		//This is executed when a user selects the scale from the Add Data Menu. 
+		function loadJoinIDList(){
+				
+			//var bound1= Object.keys(admbdy.features[0].properties);
+			//alert(document.getElementById("scale").value);
+			
+			document.getElementById("joinID2").options.length = 0; 
+			polyID = document.getElementById("joinID2");
+			op2 = document.createElement('option');
+			op2.value = "missing";
+			op2.innerHTML = "Please select";
+			polyID.appendChild(op2);
+			if (document.getElementById("scale").value == "_adm1.geojson"){
+				op2 = document.createElement('option');
+				op2.value = "ID_1";
+				op2.innerHTML = "ID_1";
+				polyID.appendChild(op2);
+				op2 = document.createElement('option');
+				op2.value = "NAME_1";
+				op2.innerHTML = "NAME_1";
+				polyID.appendChild(op2);
+			}
+			if (document.getElementById("scale").value == "_adm2.geojson"){
+				op2= document.createElement('option');
+				op2.value = "ID_2";
+				op2.innerHTML = "ID_2";
+				polyID.appendChild(op2);
+				op2= document.createElement('option');
+				op2.value = "NAME_2";
+				op2.innerHTML = "NAME_2";
+				polyID.appendChild(op2);
+			}
+			if (document.getElementById("scale").value == "_adm3.geojson"){
+				op2= document.createElement('option');
+				op2.value = "ID_3";
+				op2.innerHTML = "ID_3";
+				polyID.appendChild(op2);
+				op2= document.createElement('option');
+				op2.value = "NAME_3";
+				op2.innerHTML = "NAME_3";
+				polyID.appendChild(op2);
+			}
+			if (document.getElementById("scale").value == "_adm0.geojson"){
+				op2= document.createElement('option');
+				op2.value = "ISO";
+				op2.innerHTML = "ISO3 ID";
+				polyID.appendChild(op2);
+				op2= document.createElement('option');
+				op2.value = "NAME_0";
+				op2.innerHTML = "Country Name";
+				polyID.appendChild(op2);
+			}
+
+		}
+		
+
+	}; 
+//------------- END OF MAJOR FUNCTION to load Admin Boundary Add Data Form -------------	
+
+
+//------------- MAJOR FUNCTION: Loads the Add Data Form for Latitude and Longitude Data ---------
+//Approximately line 543 - 594
+//Load the form that allows a person to add CSV data Latitude-Longitude Format.
+	function loadlatlongForm(){
+		document.getElementById('modalcontent').innerHTML='<div class="row"><div class="col-md-3 col-md-offset-1"><h2> Step 1</h2></div>	<div class="col-md-6"></p> What type of data do you have?</p><label class="radio-inline"><input id="latlongopt" type="radio" name="optradio" value="coordinates" onclick="loadlatlongForm()" checked>Latitude/Longitude Coordinates</label><label class="radio-inline"><input id="adminopt" type="radio" name="optradio" value="Administrative Boundaries" onclick="loadAdminform()">Administrative Areas</label>		</div></div><div class="row"><div class="col-md-3 col-md-offset-1"><h2> Step 2</h2></div><div class="col-md-6"><p>Select your correctly formatted CSV file.</p><form id="fileForm2"><input type="file" id="file2" accept=".csv" class="btn btn-primary"></form><br></div></div><div class="row"><div class="col-md-3 col-md-offset-1"><h2> Step 3</h2></div><div class="col-md-6"><p>Provide a short name for this data layer: <input type="text" id="inputLayerName"><br><br>Select the fields that contain your Latitude and Longitude coordinates.</p>Latitude: <br><select id="lat"></select><br><br> Longitude: <br>	<select id="long"></select> <br> <br><button onclick="AddLatLongDataToMap()" class="btn btn-primary">Add Data</button><br></div></div>'
+		
+		//SETS DROPDOWN MENU OPTIONS FROM CSV LAT LONG FIELDS
+		document.getElementById('file2').onchange = function() {
+		
+			var t = document.getElementById("file2").files[0].name;
+		
+			//Check to make sure file is CSV
+			console.log(t.substr(t.length - 4).toUpperCase());
+			if(t.substr(t.length - 4).toUpperCase() != ".CSV"){
+				alert("I'm sorry, your file is not in CSV format. Please save your data into a CSV file and try again.");
+				document.getElementById("fileForm2").reset();
+				return; 
+			}
+			//Check to make sure GeoJSON File doesn't already exist on the server
+			var filename = t.substr(0,t.length - 4);
+			filename = filename+"_"+mapid;
+			var GeoJSONFileCheckURL = "data/output/"+filename+".geojson";
+				$.ajax({
+				url:GeoJSONFileCheckURL,
+				type:'HEAD',
+				error: function()
+				{
+					console.log("File does not exist- this is good.");
+				},
+				success: function()
+				{	
+					alert("I'm sorry, your map is already using a file with the name "+document.getElementById("file2").files[0].name+". Please rename this file to a different name and try again.");
+					document.getElementById("fileForm2").reset();
+					$('#lat').empty();	
+					$('#long').empty();
+
+				}
+			});
+		
+		
+			var x = document.getElementById("file2").files[0];
+			Papa.parse(x, {
+				header: true,
+				complete: function(results) {
+					
+					optionlist= results.meta.fields
+					lat = document.getElementById("lat")
+					longs = document.getElementById("long");
+					$('#lat').empty();
+					$('#long').empty();
+					op2 = document.createElement('option');
+					op2.value = "missing";
+					op2.innerHTML = "Please select";
+					longs.appendChild(op2);
+					op1 = document.createElement('option');
+					op1.value = "missing";
+					op1.innerHTML = "Please select";
+					lat.appendChild(op1);
+					for (i = 0; i < optionlist.length; i++) { 
+						if (/\s/.test(optionlist[i])) {
+							alert('Error: Your CSV file has a column named "'+optionlist[i]+'" that contains spaces.\n Please remove any spaces from field names in the file, save the file, and try again.');
+							document.getElementById("fileForm2").reset();
+							$('#lat').empty();	
+							$('#long').empty();							
+							return; 
+						}
+						else if(/^[a-zA-Z0-9_]*$/.test(optionlist[i]) == false) {
+							alert('Error: Your CSV file has a column named "'+optionlist[i]+'" that contains special characters like $ or & or -.\n Please only use letters, numbers, and the underscore (_) in your field names.');
+							document.getElementById("fileForm2").reset();
+							$('#lat').empty();	
+							$('#long').empty();
+							return;
+						}
+					
+						op1= document.createElement('option');
+						op1.value = optionlist[i];
+						op1.innerHTML = optionlist[i];
+						lat.appendChild(op1);
+						
+						op2= document.createElement('option');
+						op2.value = optionlist[i];
+						op2.innerHTML = optionlist[i];
+						longs.appendChild(op2);
+					}
+									
+					}
+				});
+		}
+	};
+//------------- END OF MAJOR FUNCTION to load Lat Long Add Data Form -------------	
+
+function clearFilesFromForm(){
+	if(document.getElementById("fileForm")){
+		document.getElementById("fileForm").reset();
+		$('#joinID').empty();
+	}
+	if(document.getElementById("fileForm2")){
+		document.getElementById("fileForm2").reset();
+	}
+}
+
+//Initial Function called when a user attempts to Add Admin Boundary data to the map. Checks to make sure all important information has been captured in the form.
+//If successful, calls AddJoinedAdminDataToMap function to actually process the Add Data Request. 
+	function checkMyFiles(){
+		if(document.getElementById("file").files[0] == null){
+			alert("Please select a file containing your geographic data");
+		}
+		else if(document.getElementById("country").value == "missing"){
+			alert("Please select the country where your data comes from.");
+		}
+		else if(document.getElementById("scale").value == "missing"){
+			alert("Please select the administrative level of your data.");
+		}
+		//else if(){
+			//}
+		else if(document.getElementById("inputLayerName2").value == ""){
+			alert("Please enter a name for your layer");
+		}		
+		else if(document.getElementById("joinID2").value == "missing"){
+			alert("Please select the field from the geographic dataset to which your data will be joined.");
+		}
+		else if(document.getElementById("joinID").value == "missing"||document.getElementById("joinID").value == ""){
+			alert("Please select the field in your CSV file which will be joined to the geographic data.");
+		}
+		else{
+		
+		for (i = 0; i < MultiColorDefinitions.length; i++) {
+			if(MultiColorDefinitions[i]["LayerName"] == document.getElementById("inputLayerName2").value){
+				alert("Your document already contains a layer with this name. Please provide a different name for your layer."); 
+				return; 
+			}
+		}
+		
+		//Check to make sure the correct boundary file exists to join the users Admin Boundary data to. 
+		filenameURL = "data/"+document.getElementById("country").value+document.getElementById("scale").value;
+		$.ajax({
+			url:filenameURL,
+			type:'HEAD',
+			error: function()
+			{
+				
+				alert("I'm sorry, our system does not contain an "+document.getElementById("scale").options[document.getElementById("scale").selectedIndex].text+" boundary file for "+document.getElementById("country").options[document.getElementById("country").selectedIndex].text+". Please contact for assistance.");
+			},
+			success: function()
+			{
+				AddJoinedAdminDataToMap(); 
+			}
+		});	
+		}		
+	}
+	
+// --------------- MAJOR FUNCTION TO PROCESS AND ADD Admin Boundary data to the map. --------
+// Approximately lines 648 - 777
+	function AddJoinedAdminDataToMap(){
+		
+		document.getElementById("FocusCountry").value = document.getElementById("country").value; 
+		
+		var x = document.getElementById("file").files[0];
+		
+		var joinID = document.getElementById("joinID");
+		var selectedID = joinID.options[joinID.selectedIndex].value;
+		var bjoinID = document.getElementById("joinID2").value;
+		
+		
+		
+		Papa.parse(x, {
+			header: true,
+			dynamicTyping: true,
+			skipEmptyLines: true,
+			complete: function(results) {
+				var csvdata = results;
+
+				var t = document.getElementById("file").files[0].name;
+				var filename = t.substr(0,t.length - 4);
+				filename = filename+"_"+mapid;
+				cfileNameList.push(filename);
+				
+				var cElement = document.getElementById("country");
+				var element = document.getElementById("scale");
+				var selectedValue = cElement.options[cElement.selectedIndex].value + element.options[element.selectedIndex].value;
+				
+				$.ajax({
+					data: {filename:filename,boundname:selectedValue, selectedID: selectedID, bjoinID: bjoinID, csvdata: csvdata.data, },
+					url: 'datastorePolys_v2.php',
+					method: 'POST',
+					success: function(msg) {
+						console.log(msg);
+						document.getElementById("ResultsDetails").innerHTML = msg; 
+						document.getElementById("modalBodyResults").style.maxHeight = window.innerHeight-75+"px";
+						$('#ResultsModal').modal('show');
+						if( msg.indexOf('Failure!') >= 0){
+						  var script= document.createElement('script');
+							script.type = "text/javascript";
+							
+							document.getElementById("test").appendChild(script);
+						}
+						
+						else{
+							var script= document.createElement('script');
+							script.type = "text/javascript";
+							script.src='data/output/'+filename+'.geojson';
+							document.getElementById("test").appendChild(script);
+						};
+						script.onload = function() {
+						 						
+							var dynamicColor = '#'+Math.floor(Math.random()*16777215).toString(16);
+							cnumDynamicLayers++; 
+							
+							var geojsondata = (function () {
+								var geojsondata = null;
+								$.ajax({
+									'async': false,
+									'global': false,
+									'url': 'data/output/'+filename+'.geojson',
+									'dataType': "json",
+									'success': function (data) {
+									geojsondata = data;
+									}
+								});
+								return geojsondata;
+							})(); 
+							
+							userLayers[cnumDynamicLayers] = L.geoJson(geojsondata,{
+								style: function (feature) {
+									return {
+									 "color": "#464646",
+									 "fillColor": dynamicColor,
+									 "fillOpacity": 0.6,
+									 "opacity": 0.9,
+									 "weight": 1,
+									}},
+									onEachFeature: onEachFeature
+							}).addTo(map);
+							
+							userLayers[cnumDynamicLayers].eachLayer(function(layer){layer.closeTooltip();});
+							
+							layerControl.addOverlay(userLayers[cnumDynamicLayers], document.getElementById("inputLayerName2").value);
+							
+							var inputName = document.getElementById("inputLayerName2").value;
+							cDynamicLayers.push(inputName);
+							OrderList.push(inputName);
+							 
+							var LegendWidthFormula = (document.getElementById("inputLayerName2").value.length*8)+100;  
+							if(document.getElementById('Legendcontent').offsetWidth < LegendWidthFormula){
+								
+							}
+							console.log(document.getElementById('Legendcontent').offsetWidth); 
+							
+							var LegendBoxID = "LB"+document.getElementById("inputLayerName2").value.replace(/\s/g, '');
+							var existingLegendContent = document.getElementById('Legendcontent').innerHTML;
+							document.getElementById('Legendcontent').innerHTML = '<div class="LegendItem" id="LI'+LegendBoxID+'"><i id="'+LegendBoxID+'" style="background: '+dynamicColor+'"></i><span id="Lynme'+LegendBoxID+'">'+document.getElementById("inputLayerName2").value+'&nbsp; &nbsp; </span><a href="javascript:void(0)" onclick="changeMapSettings(\''+inputName+'\',\''+lgndCnt+'\')"><img src="image/ColorSettings.png" height="15" width="15"></a>    <a href="javascript:void(0)" onclick="RemoveLayer(\''+inputName+'\',\''+lgndCnt+'\')"><span class="glyphicon glyphicon-remove-circle cancel"></span></a></div><br>'+existingLegendContent;
+
+							
+							lgndCnt++;
+							
+							//For this new layer, add an empty MultiColorDefinitions array item. 
+							//This will be used to store multicolor definitions if a user chooses to later define and save them. 
+							MultiColorDefinitions.push({LayerName:inputName, DisplayName:inputName, transparency:0.6, ColorType:"OneColor", DisplayDefaultColor:"TRUE", DisplayMapLabels:"FALSE", FieldName:"missing", Cat1:"", Cat2:"", Cat3:"", Cat4:"", Cat5:"", Cat1Color:"66C2A5", Cat2Color:"FC8D62", Cat3Color:"8DA0CB", Cat4Color:"E78AC3", Cat5Color:"A6D854", Rng1Low:"", Rng2Low:"", Rng3Low:"", Rng4Low:"", Rng5Low:"", Rng1High:"", Rng2High:"", Rng3High:"", Rng4High:"", Rng5High:"", Rng1Color:"FEF0D9", Rng2Color:"FDCC8A", Rng3Color:"FC8D59", Rng4Color:"E34A33", Rng5Color:"B30000"});
+							
+						//hide modal
+							 $('#myModal').modal('hide');
+							 
+							//Create Download and Save buttons	
+							if(!document.getElementById('downloadbutton')){
+								 $('#buttons').append("<button id='downloadbutton' type='button' class='btn btn-info btn-lg' data-toggle='modal' data-target='#Downloadmodal' onclick='writeDownloadList()'> Download Data </button> <button id='svButton' type='button' class='btn btn-info btn-lg' onclick='showSaveDialog()'>Save Map</button>"); 
+							};
+							if(document.getElementById('svButton').style.display=="none"){
+								document.getElementById('svButton').style.display="block"; 
+							}
+							 
+							 
+															 
+						};
+											
+						//end
+					}
+				});
+				
+				
+			}
+		});
+	}
+// ---------- END of MAJOR FUNCTION TO PROCESS AND ADD Admin Boundary data to the map. ----------
+	
+
+	function rgb2hex(rgb){
+		rgb = rgb.match(/^rgba?[\s+]?\([\s+]?(\d+)[\s+]?,[\s+]?(\d+)[\s+]?,[\s+]?(\d+)[\s+]?/i);
+		return (rgb && rgb.length === 4) ?
+		("0" + parseInt(rgb[1],10).toString(16)).slice(-2) +
+		("0" + parseInt(rgb[2],10).toString(16)).slice(-2) +
+		("0" + parseInt(rgb[3],10).toString(16)).slice(-2) : '';
+	}
+	
+	
+	function BringLyrFront(ModNum){
+		userLayers[layerBeingModified].bringToFront(); 
+		
+		var index = OrderList.indexOf(document.getElementById('layerNameStyMod').innerHTML);
+		if (index >= 0) {
+			OrderList.splice( index, 1 );
+		}
+		OrderList.push(document.getElementById('layerNameStyMod').innerHTML);
+		
+		alert("This layer has been moved forward. The change will be reflected in the legend and layer list after you save your map document and refresh the page."); 
+	}
+	
+	function changeMapSettings(ModLayer,ModNum,Caller){
+		
+		PromotedItem = ModNum+1;
+		 
+		for (i = 0; i < MultiColorDefinitions.length; i++) {
+			if(MultiColorDefinitions[i]["LayerName"] == ModLayer){
+				MCItemNum = i; 
+			}
+		}
+		
+		layerBeingModified = Number(ModNum)+1;
+			var opc = (100-MultiColorDefinitions[MCItemNum]["transparency"])/100;
+			var fopc = (100-MultiColorDefinitions[MCItemNum]["transparency"])/100;
+			 
+			userLayers[layerBeingModified].setStyle({fillOpacity:fopc,opacity:opc});
+		
+			var ModSpanName = "LynmeLB"+MultiColorDefinitions[MCItemNum]["LayerName"].replace(/\s/g, '');
+
+			document.getElementById(ModSpanName).innerHTML = MultiColorDefinitions[MCItemNum]["DisplayName"]+"&nbsp;&nbsp; "; 
+			document.getElementById("modedDisplayName").value = MultiColorDefinitions[MCItemNum]["DisplayName"];
+			document.getElementById("tranSel").value = MultiColorDefinitions[MCItemNum]["transparency"];
+			console.log(MultiColorDefinitions[MCItemNum]["DisplayMapLabels"]);
+			if(MultiColorDefinitions[MCItemNum]["DisplayDefaultColor"]=="FALSE"){
+				document.getElementById("ShowDefault").checked = false;
+			}
+			else{
+				document.getElementById("ShowDefault").checked = true;
+			}
+			if(MultiColorDefinitions[MCItemNum]["DisplayMapLabels"]&&MultiColorDefinitions[MCItemNum]["DisplayMapLabels"]=="TRUE"){
+				document.getElementById("ShowLabel").checked = true;
+			}
+			else{
+				document.getElementById("ShowLabel").checked = false;
+			}
+
+		
+		if(Caller == "LoadPrevious" && MultiColorDefinitions[MCItemNum]["ColorType"] == "OneColor"){
+			  
+		}
+		
+		
+		document.getElementById('ColorType').value=MultiColorDefinitions[MCItemNum]["ColorType"];
+		 
+		
+		document.getElementById('Cat1').value=MultiColorDefinitions[MCItemNum]["Cat1"];
+		document.getElementById('Cat2').value=MultiColorDefinitions[MCItemNum]["Cat2"];
+		document.getElementById('Cat3').value=MultiColorDefinitions[MCItemNum]["Cat3"];
+		document.getElementById('Cat4').value=MultiColorDefinitions[MCItemNum]["Cat4"];
+		document.getElementById('Cat5').value=MultiColorDefinitions[MCItemNum]["Cat5"];
+		document.getElementById('Cat1Color').value=MultiColorDefinitions[MCItemNum]["Cat1Color"];
+		document.getElementById('Cat1Color').style.background = "#"+MultiColorDefinitions[MCItemNum]["Cat1Color"];
+		document.getElementById('Cat2Color').value=MultiColorDefinitions[MCItemNum]["Cat2Color"];
+		document.getElementById('Cat2Color').style.background = "#"+MultiColorDefinitions[MCItemNum]["Cat2Color"];
+		document.getElementById('Cat3Color').value=MultiColorDefinitions[MCItemNum]["Cat3Color"];
+		document.getElementById('Cat3Color').style.background = "#"+MultiColorDefinitions[MCItemNum]["Cat3Color"];
+		document.getElementById('Cat4Color').value=MultiColorDefinitions[MCItemNum]["Cat4Color"];
+		document.getElementById('Cat4Color').style.background = "#"+MultiColorDefinitions[MCItemNum]["Cat4Color"];
+		document.getElementById('Cat5Color').value=MultiColorDefinitions[MCItemNum]["Cat5Color"];
+		document.getElementById('Cat5Color').style.background = "#"+MultiColorDefinitions[MCItemNum]["Cat5Color"];
+		
+		document.getElementById('Rng1Low').value=MultiColorDefinitions[MCItemNum]["Rng1Low"];
+		document.getElementById('Rng2Low').value=MultiColorDefinitions[MCItemNum]["Rng2Low"];
+		document.getElementById('Rng3Low').value=MultiColorDefinitions[MCItemNum]["Rng3Low"];
+		document.getElementById('Rng4Low').value=MultiColorDefinitions[MCItemNum]["Rng4Low"];
+		document.getElementById('Rng5Low').value=MultiColorDefinitions[MCItemNum]["Rng5Low"];
+		document.getElementById('Rng1High').value=MultiColorDefinitions[MCItemNum]["Rng1High"];
+		document.getElementById('Rng2High').value=MultiColorDefinitions[MCItemNum]["Rng2High"];
+		document.getElementById('Rng3High').value=MultiColorDefinitions[MCItemNum]["Rng3High"];
+		document.getElementById('Rng4High').value=MultiColorDefinitions[MCItemNum]["Rng4High"];
+		document.getElementById('Rng5High').value=MultiColorDefinitions[MCItemNum]["Rng5High"];
+		document.getElementById('Rng1Color').value=MultiColorDefinitions[MCItemNum]["Rng1Color"];
+		document.getElementById('Rng1Color').style.background = "#"+MultiColorDefinitions[MCItemNum]["Rng1Color"];
+		document.getElementById('Rng2Color').value=MultiColorDefinitions[MCItemNum]["Rng2Color"];
+		document.getElementById('Rng2Color').style.background = "#"+MultiColorDefinitions[MCItemNum]["Rng2Color"];
+		document.getElementById('Rng3Color').value=MultiColorDefinitions[MCItemNum]["Rng3Color"];
+		document.getElementById('Rng3Color').style.background = "#"+MultiColorDefinitions[MCItemNum]["Rng3Color"];
+		document.getElementById('Rng4Color').value=MultiColorDefinitions[MCItemNum]["Rng4Color"];
+		document.getElementById('Rng4Color').style.background = "#"+MultiColorDefinitions[MCItemNum]["Rng4Color"];
+		document.getElementById('Rng5Color').value=MultiColorDefinitions[MCItemNum]["Rng5Color"];
+		document.getElementById('Rng5Color').style.background = "#"+MultiColorDefinitions[MCItemNum]["Rng5Color"];
+		
+		changeColorForm();
+		
+		
+		var ModedLegendBox = "LB"+ModLayer.replace(/\s/g, '');
+		
+		document.getElementById('currColor').value = rgb2hex(document.getElementById(ModedLegendBox).style.background);
+		document.getElementById('currColor').style.backgroundColor = "#"+rgb2hex(document.getElementById(ModedLegendBox).style.background);	
+		
+		document.getElementById('layerNameStyMod').innerHTML = ModLayer; 
+
+		
+		
+		$('#FieldName').empty();
+		
+		colorFSel = document.getElementById("FieldName");
+		op1 = document.createElement('option');
+		op1.value = "missing";
+		op1.innerHTML = "Please select";
+		colorFSel.appendChild(op1);
+		
+				
+		var FieldHeadings; 
+		
+		Object.keys(userLayers[layerBeingModified]._layers).every(function(item, index){
+			
+			
+			FieldHeadings = Object.keys((userLayers[layerBeingModified]._layers)[item].feature.properties); 
+			
+		});
+		
+		
+		
+		for (i = 0; i < FieldHeadings.length; i++) { 
+
+			op1= document.createElement('option');
+			op1.value = FieldHeadings[i];
+			op1.innerHTML = FieldHeadings[i];
+			colorFSel.appendChild(op1);
+		}
+		
+		document.getElementById('FieldName').value=MultiColorDefinitions[MCItemNum]["FieldName"];
+			
+		
+		if(Caller == "LoadPrevious"){
+			makeMapMods(); 
+		}
+		else{
+			$('#myModalMapMods').modal('show');
+		}
+		
+		return; 
+		
+	}
+	
+	function changeColorForm(){
+		if(document.getElementById("ColorType").value == "OneColor"){
+			document.getElementById("colorFieldSelector").style.display = "none";
+			document.getElementById("categoryColorSelector").style.display = "none";
+			document.getElementById("rangeColorSelector").style.display = "none";
+			document.getElementById("mainColorLabel").innerHTML = "Color:";
+		}
+		else if(document.getElementById("ColorType").value == "ColorCategory"){
+			document.getElementById("colorFieldSelector").style.display = "block";
+			document.getElementById("categoryColorSelector").style.display = "block";
+			document.getElementById("rangeColorSelector").style.display = "none";
+			document.getElementById("mainColorLabel").innerHTML = "Default Color:";
+		}
+		else if(document.getElementById("ColorType").value == "ColorRange"){
+			document.getElementById("colorFieldSelector").style.display = "block";
+			document.getElementById("categoryColorSelector").style.display = "none";
+			document.getElementById("rangeColorSelector").style.display = "block";
+			document.getElementById("mainColorLabel").innerHTML = "Default Color:";
+		}
+	
+	return; 
+	}
+	//Function to Change Map Title
+	function ChangeTitle(){
+		document.getElementById('title').innerHTML = document.getElementById('modedMapTitle').value;
+		$('#TitleModal').modal('hide');
+	};
+	
+	//Fuction that processes color modifications to a layer. 
+	function makeMapMods(){
+		
+//---------------- SECTION 1 SETS STANDARD SETTINGS: Default color, layer display names, removes sub-items --------------------------		
+		//Set the standard (default) color
+		//document.getElementById('title').innerHTML = document.getElementById('modedMapTitle').value; //changes to function above
+		var ModedLegendBox = "LB"+document.getElementById('layerNameStyMod').innerHTML.replace(/\s/g, '');
+		var FinalColor = "#"+document.getElementById('currColor').value;
+		document.getElementById(ModedLegendBox).style.background = FinalColor; 
+		userLayers[layerBeingModified].setStyle({fillColor:FinalColor});
+		
+		if(document.getElementById("ShowDefault").checked){
+			document.getElementById(ModedLegendBox).style.visibility = "visible"; 
+			MultiColorDefinitions[MCItemNum]["DisplayDefaultColor"] = "TRUE";
+		}
+		else{
+			document.getElementById(ModedLegendBox).style.visibility = "hidden"; 
+			userLayers[layerBeingModified].setStyle({fillColor:"none"});
+			MultiColorDefinitions[MCItemNum]["DisplayDefaultColor"] = "FALSE";
+		}
+		
+		if(document.getElementById("ShowLabel").checked){
+			userLayers[layerBeingModified].eachLayer(function(layer){layer.openTooltip();});
+			MultiColorDefinitions[MCItemNum]["DisplayMapLabels"] = "TRUE";
+		}
+		else{
+			userLayers[layerBeingModified].eachLayer(function(layer){layer.closeTooltip();});
+			MultiColorDefinitions[MCItemNum]["DisplayMapLabels"] = "FALSE";
+		}
+		//console.log(ModLayer);
+		//console.log(userLayers[layerBeingModified]); 
+		
+		//Clean out any existing sub-colored items in the legend. If they exist, we will recreate them. 
+		for (var i = 1; i < 6; i++) {
+			var SubLegendBoxID = "LISLB"+document.getElementById('layerNameStyMod').innerHTML.replace(/\s/g, '')+"Cat"+i;
+			if(document.getElementById(SubLegendBoxID) != null){
+				document.getElementById(SubLegendBoxID).remove(); 
+			}
+			var SubLegendBoxIDrng = "LISLB"+document.getElementById('layerNameStyMod').innerHTML.replace(/\s/g, '')+"Rng"+i;
+			if(document.getElementById(SubLegendBoxIDrng) != null){
+				document.getElementById(SubLegendBoxIDrng).remove(); 
+			}
+		}
+		
+		//Assign MultiColorDefinitions array with new values. 
+		//This keeps the MultiColorDefinitions array up to date. 
+		MultiColorDefinitions[MCItemNum]["ColorType"] = document.getElementById('ColorType').value;
+		MultiColorDefinitions[MCItemNum]["transparency"] = document.getElementById('tranSel').value;
+		MultiColorDefinitions[MCItemNum]["DisplayName"] = document.getElementById('modedDisplayName').value;
+		
+		//Assign a modified display name to the legend. 
+		var ModSpanName = "LynmeLB"+MultiColorDefinitions[MCItemNum]["LayerName"].replace(/\s/g, '');
+		document.getElementById(ModSpanName).innerHTML = document.getElementById('modedDisplayName').value+"&nbsp;&nbsp; "; 
+		
+		//Set Opacity for the layer being modified. 
+		var opc = (100-document.getElementById("tranSel").value)/100;
+		var fopc = (100-document.getElementById("tranSel").value)/100;
+		//console.log("New Opacity: "+opc); 
+		userLayers[layerBeingModified].setStyle({fillOpacity:fopc,opacity:opc});
+		
+//----------------END OF SECTION 1, Regardless of single/multi color -------------------
+		
+//----------------- BEGINNING OF SECTION 2: ONLY PROCESSED IF ColorType is MultiColors ------------		
+		//If not single color, process for a multi-color layer
+		if(document.getElementById("ColorType").value != "OneColor"){ 
+		//console.log("processing single category color");
+		//Get the selected data field for which each layer item will be evaluated against for assigning the color. 
+		var SelectedField = document.getElementById("FieldName").value;
+		// If Data field has not been selected, error out. 
+		if(SelectedField == 'missing'){
+			alert("Please select the data field"); 
+			return; 
+		}
+		
+
+		//Assign MultiColorDefinitions array with new values. 
+		//This keeps the MultiColorDefinitions array up to date. 
+		MultiColorDefinitions[MCItemNum]["FieldName"] = document.getElementById('FieldName').value;
+		MultiColorDefinitions[MCItemNum]["ColorType"] = document.getElementById('ColorType').value;
+		
+// -------- BEGINNING OF SECTION 2A: PORCESS IF 'Category' Color Type, PROCESS data into categories, and write items to legend. 
+		if(document.getElementById('ColorType').value == "ColorCategory"){
+		
+		//Get a list of all the items in the layer.  
+		var FeatClassItems = Object.keys(userLayers[layerBeingModified]._layers); 
+		//for each item in the layer, check value and assign a color to the item. 
+		FeatClassItems.forEach(ModMultiColorsCat);
+				
+
+		//FUNCTION: For colors based on category, checks value for each item. If matching value is found, the appropriate color is assigned to the item.
+		function ModMultiColorsCat(item, index){
+			var LayerItem = eval("(userLayers[layerBeingModified]._layers)[item].feature.properties."+SelectedField);
+			
+			if (LayerItem ==document.getElementById("Cat1").value){
+				Object.keys((userLayers[layerBeingModified]._layers)[item].setStyle({fillColor:"#"+document.getElementById("Cat1Color").value}));
+			}
+			if (LayerItem ==document.getElementById("Cat2").value){
+				Object.keys((userLayers[layerBeingModified]._layers)[item].setStyle({fillColor:"#"+document.getElementById("Cat2Color").value}));
+			}
+			if (LayerItem ==document.getElementById("Cat3").value){
+				Object.keys((userLayers[layerBeingModified]._layers)[item].setStyle({fillColor:"#"+document.getElementById("Cat3Color").value}));
+			}
+			if (LayerItem ==document.getElementById("Cat4").value){
+				Object.keys((userLayers[layerBeingModified]._layers)[item].setStyle({fillColor:"#"+document.getElementById("Cat4Color").value}));
+			}
+			if (LayerItem ==document.getElementById("Cat5").value){
+				Object.keys((userLayers[layerBeingModified]._layers)[item].setStyle({fillColor:"#"+document.getElementById("Cat5Color").value}));
+			}
+		}
+		
+		//BEGINNING OF SECTION TO ADD SUB ITEMS TO THE LEGEND. 
+		//Use parent legend item to determine if sub item should be a circle or square 
+		var IsCircle = false;
+		var ParentIitem = "LB"+(document.getElementById('layerNameStyMod').innerHTML.replace(/\s/g, ''));
+		if(document.getElementById(ParentIitem).style.borderRadius == "50%"){
+			IsCircle = true; 
+		}
+		else{
+			IsCircle = false;
+		}
+		
+		//Checks to see if a category sub-item has been defined. 
+		//If YES, write it to the legend. and update MultiColorDefinition array. 
+		//If NO, Remove the value from the MultiColorDefinition array. 
+		if(document.getElementById("Cat5").value != ""){
+			WriteLegendSubItem("Cat5");
+			MultiColorDefinitions[MCItemNum]["Cat5"] = document.getElementById('Cat5').value;
+			MultiColorDefinitions[MCItemNum]["Cat5Color"] = document.getElementById('Cat5Color').value;
+		}
+		else{
+			MultiColorDefinitions[MCItemNum]["Cat5"] = "";
+		}
+		if(document.getElementById("Cat4").value != ""){
+			WriteLegendSubItem("Cat4");
+			MultiColorDefinitions[MCItemNum]["Cat4"] = document.getElementById('Cat4').value;
+			MultiColorDefinitions[MCItemNum]["Cat4Color"] = document.getElementById('Cat4Color').value;
+		}
+		else{
+			MultiColorDefinitions[MCItemNum]["Cat4"] = ""; 
+		}
+		if(document.getElementById("Cat3").value != ""){
+			WriteLegendSubItem("Cat3");
+			MultiColorDefinitions[MCItemNum]["Cat3"] = document.getElementById('Cat3').value;
+			MultiColorDefinitions[MCItemNum]["Cat3Color"] = document.getElementById('Cat3Color').value;
+		}
+		else{
+			MultiColorDefinitions[MCItemNum]["Cat3"] = ""; 
+		}
+		if(document.getElementById("Cat2").value != ""){
+			WriteLegendSubItem("Cat2");
+			MultiColorDefinitions[MCItemNum]["Cat2"] = document.getElementById('Cat2').value;
+			MultiColorDefinitions[MCItemNum]["Cat2Color"] = document.getElementById('Cat2Color').value;
+		}
+		else{
+			MultiColorDefinitions[MCItemNum]["Cat2"] = "";
+		}
+				
+		if(document.getElementById("Cat1").value != ""){
+			WriteLegendSubItem("Cat1");
+			MultiColorDefinitions[MCItemNum]["Cat1"] = document.getElementById('Cat1').value;
+			MultiColorDefinitions[MCItemNum]["Cat1Color"] = document.getElementById('Cat1Color').value;
+		}
+		else{
+			MultiColorDefinitions[MCItemNum]["Cat1"] = ""; 
+		}
+		
+		//Called from preceeding section, writes subcategory to the legend. 
+		function WriteLegendSubItem(ItemNum){
+			var SubLegendBoxID = "SLB"+document.getElementById('layerNameStyMod').innerHTML.replace(/\s/g, '')+ItemNum;
+			var SubLegendContent = '<div class="SubLegendItem" id="LI'+SubLegendBoxID+'">&nbsp;&nbsp;&nbsp;<i id="'+SubLegendBoxID+'" style="background:#'+document.getElementById(ItemNum+"Color").value+';width:18px;'+(IsCircle ? 'border-radius:50%' : '')+';border-style:solid;border-color:black;border-width:1px;"></i>'+document.getElementById(ItemNum).value+'&nbsp; &nbsp; </div>';
+			
+			
+			var ModedLegendItem = "#LILB"+document.getElementById('layerNameStyMod').innerHTML.replace(/\s/g, '');
+
+			$(ModedLegendItem).after(SubLegendContent); 
+			
+		}
+		
+		}//End if Processing Color Categories (2A)
+//-------------------------------------------------------------------------------------------------		
+		
+// -------- BEGINNING OF SECTION 2B: PORCESS IF 'Category' Color Type, PROCESS data into categories, and write items to legend.
+		if(document.getElementById('ColorType').value == "ColorRange"){
+		
+		
+		var FeatClassItems = Object.keys(userLayers[layerBeingModified]._layers); 
+		//for each item in the layer, check value and assign a color to the item. 
+		FeatClassItems.forEach(ModMultiColorsRng);
+				
+		 
+		//FUNCTION: For colors based on ranges, checks value for each item. If matching value is found, the appropriate color is assigned to the item.
+		function ModMultiColorsRng(item, index){
+			var LayerItem = eval("(userLayers[layerBeingModified]._layers)[item].feature.properties."+SelectedField);
+			
+			LayerItem = Number(LayerItem);
+			console.log(LayerItem);
+			
+			if (LayerItem >= document.getElementById("Rng1Low").value && LayerItem <= document.getElementById("Rng1High").value){
+				Object.keys((userLayers[layerBeingModified]._layers)[item].setStyle({fillColor:"#"+document.getElementById("Rng1Color").value}));
+			}
+			if (LayerItem >=document.getElementById("Rng2Low").value && LayerItem <= document.getElementById("Rng2High").value){
+				Object.keys((userLayers[layerBeingModified]._layers)[item].setStyle({fillColor:"#"+document.getElementById("Rng2Color").value}));
+			}
+			if (LayerItem >=document.getElementById("Rng3Low").value && LayerItem <= document.getElementById("Rng3High").value){
+				Object.keys((userLayers[layerBeingModified]._layers)[item].setStyle({fillColor:"#"+document.getElementById("Rng3Color").value}));
+			}
+			if (LayerItem >=document.getElementById("Rng4Low").value && LayerItem <= document.getElementById("Rng4High").value){
+				console.log("Inside Rng 4 settings");
+				Object.keys((userLayers[layerBeingModified]._layers)[item].setStyle({fillColor:"#"+document.getElementById("Rng4Color").value}));
+			}
+			
+			if (LayerItem >=document.getElementById("Rng5Low").value && LayerItem <= document.getElementById("Rng5High").value){
+				console.log("Inside Rng 5 settings");
+				Object.keys((userLayers[layerBeingModified]._layers)[item].setStyle({fillColor:"#"+document.getElementById("Rng5Color").value}));
+			}
+		}
+		
+		//BEGINNING OF SECTION TO ADD SUB ITEMS TO THE LEGEND. 
+		//Use parent legend item to determine if sub item should be a circle or square 
+		var IsCircle = false;
+		var ParentIitem = "LB"+(document.getElementById('layerNameStyMod').innerHTML.replace(/\s/g, ''));
+		if(document.getElementById(ParentIitem).style.borderRadius == "50%"){
+	
+			IsCircle = true; 
+		}
+		else{
+			
+			IsCircle = false;
+		}
+		
+		//Checks to see if a Range sub-item has been defined. 
+		//If YES, write it to the legend. and update MultiColorDefinition array. 
+		//If NO, Remove the value from the MultiColorDefinition array.
+		console.log("checking for range values:");
+		console.log(document.getElementById("Rng5Low").value);
+		if(document.getElementById("Rng5Low").value != ""){
+			WriteLegendSubItemR("Rng5");
+			MultiColorDefinitions[MCItemNum]["Rng5Low"] = document.getElementById('Rng5Low').value;
+			MultiColorDefinitions[MCItemNum]["Rng5High"] = document.getElementById('Rng5High').value;
+			MultiColorDefinitions[MCItemNum]["Rng5Color"] = document.getElementById('Rng5Color').value;
+		}
+		else{
+			MultiColorDefinitions[MCItemNum]["Rng5Low"] = "";
+			MultiColorDefinitions[MCItemNum]["Rng5High"] = "";
+		}
+		if(document.getElementById("Rng4Low").value != ""){
+			WriteLegendSubItemR("Rng4");
+			MultiColorDefinitions[MCItemNum]["Rng4Low"] = document.getElementById('Rng4Low').value;
+			MultiColorDefinitions[MCItemNum]["Rng4High"] = document.getElementById('Rng4High').value;
+			MultiColorDefinitions[MCItemNum]["Rng4Color"] = document.getElementById('Rng4Color').value;
+		}
+		else{
+			MultiColorDefinitions[MCItemNum]["Rng4Low"] = "";
+			MultiColorDefinitions[MCItemNum]["Rng4High"] = "";
+		}
+		if(document.getElementById("Rng3Low").value != ""){
+			WriteLegendSubItemR("Rng3");
+			MultiColorDefinitions[MCItemNum]["Rng3Low"] = document.getElementById('Rng3Low').value;
+			MultiColorDefinitions[MCItemNum]["Rng3High"] = document.getElementById('Rng3High').value;
+			MultiColorDefinitions[MCItemNum]["Rng3Color"] = document.getElementById('Rng3Color').value;
+		}
+		else{
+			MultiColorDefinitions[MCItemNum]["Rng3Low"] = "";
+			MultiColorDefinitions[MCItemNum]["Rng3High"] = "";
+		}
+		if(document.getElementById("Rng2Low").value != ""){
+			WriteLegendSubItemR("Rng2");
+			MultiColorDefinitions[MCItemNum]["Rng2Low"] = document.getElementById('Rng2Low').value;
+			MultiColorDefinitions[MCItemNum]["Rng2High"] = document.getElementById('Rng2High').value;
+			MultiColorDefinitions[MCItemNum]["Rng2Color"] = document.getElementById('Rng2Color').value;
+		}
+		else{
+			MultiColorDefinitions[MCItemNum]["Rng2Low"] = "";
+			MultiColorDefinitions[MCItemNum]["Rng2High"] = "";
+		}
+		if(document.getElementById("Rng1Low").value != ""){
+			WriteLegendSubItemR("Rng1");
+			MultiColorDefinitions[MCItemNum]["Rng1Low"] = document.getElementById('Rng1Low').value;
+			MultiColorDefinitions[MCItemNum]["Rng1High"] = document.getElementById('Rng1High').value;
+			MultiColorDefinitions[MCItemNum]["Rng1Color"] = document.getElementById('Rng1Color').value;
+		}
+		else{
+			MultiColorDefinitions[MCItemNum]["Rng1Low"] = "";
+			MultiColorDefinitions[MCItemNum]["Rng1High"] = "";
+		}
+		
+		//Called from preceeding section, writes subranges to the legend. 
+		function WriteLegendSubItemR(ItemNum){
+
+		var ItemNumL = ItemNum+"Low";
+		var ItemNumH = ItemNum+"High";
+		
+			var SubLegendBoxID = "SLB"+document.getElementById('layerNameStyMod').innerHTML.replace(/\s/g, '')+ItemNum;
+			var SubLegendContent = '<div class="SubLegendItem" id="LI'+SubLegendBoxID+'">&nbsp;&nbsp;&nbsp;<i id="'+SubLegendBoxID+'" style="background:#'+document.getElementById(ItemNum+"Color").value+';width:18px;'+(IsCircle ? 'border-radius:50%' : '')+';border-style:solid;border-color:black;border-width:1px;"></i>'+document.getElementById(ItemNumL).value+' - '+document.getElementById(ItemNumH).value+'&nbsp; &nbsp; </div>';
+			
+			
+			var ModedLegendItem = "#LILB"+document.getElementById('layerNameStyMod').innerHTML.replace(/\s/g, '');
+
+			$(ModedLegendItem).after(SubLegendContent); 
+			
+		}//END OF Fuction to write sub-items to legend. 
+				
+		}//END if Processing Color Ranges (2B)
+//--------------------------------------------------------------------------------------------------
+		
+		}// end if not single colors (SECTION 2)
+//--------------------------------------------------------------------------------------------------
+		
+		
+		//All done with color mods, close Map Mod Modal Dialog Box
+		$('#myModalMapMods').modal('hide');
+		
+		return; 
+	}//END OF MAJOR FUCTION: makeMapMods.
+//-----------------------------------------------------------------------------------------------------	
+		
+	function RemoveLayer(inputName, LegendCnt) {
+	
+	var r = confirm("Are you sure you want to delete this layer?");
+	if (r == true) { //confirm accepted, delete layer. 
+	console.log(inputName); 
+	layerBeingModified = Number(LegendCnt)+1;
+	var RemLegendBox = "LILB"+inputName.replace(/\s/g, '');
+	console.log(RemLegendBox);
+	map.removeLayer(userLayers[layerBeingModified]);
+	layerControl.removeLayer(userLayers[layerBeingModified]);
+	
+	document.getElementById(RemLegendBox).style.display = "none"; 
+
+	for (var i = 1; i < 6; i++) {
+			var SubLegendBoxID = "LISLB"+inputName.replace(/\s/g, '')+"Cat"+i;
+			var jslbid = "#"+SubLegendBoxID;
+			if(document.getElementById(SubLegendBoxID) != null){
+				$(jslbid).remove();
+				
+			}
+			var SubLegendBoxIDrng = "LISLB"+inputName.replace(/\s/g, '')+"Rng"+i;
+			var jslbidr = "#"+SubLegendBoxIDrng;
+			if(document.getElementById(SubLegendBoxIDrng) != null){
+				$(jslbidr).remove();
+				
+			}
+	}
+	
+	
+	var index = cDynamicLayers.indexOf(inputName);
+		if (index > -1) {
+			
+			cDynamicLayers.splice(index, 1);
+			cfileNameList.splice(index, 1);
+			
+			MultiColorDefinitions.splice(index, 1);
+			
+		}
+		for(var i = OrderList.length -1; i >= 0 ; i--){
+			if(OrderList[i] == inputName){
+				OrderList.splice(i, 1);
+			}
+		}
+		
+		console.log(OrderList.length);
+		if(OrderList.length == 0){
+			document.getElementById('svButton').style.display="none";
+		}
+		
+	} else { //confirm not accepted. 
+			
+		}	
+	}
+	
+	function showSaveDialog(){
+		document.getElementById('getSaveInfo').style.display="block";
+		document.getElementById('showSaveResults').style.display="none";
+		$('#myModal3').modal('show');
+	}
+	
+	function savemap(){
+	
+			if(document.getElementById('owner').value == ""){
+				alert("Please provide your name.");
+				return; 
+			}
+			if(document.getElementById('ownerOrg').value == ""){
+				alert("Please list your organization.");
+				return; 
+			}
+			if(document.getElementById('FocusCountry').value == "missing"){
+				alert("Please select the country focus for your map.");
+				return; 
+			}
+			if(document.getElementById('about').value == ""){
+				alert("Please give us some information about this map.");
+				return; 
+			}
+		console.log("Saving Map."); 	
+			
+			document.getElementById('getSaveInfo').style.display="none";
+			document.getElementById('showSaveResults').style.display="block";
+	
+			var mapname= document.getElementById('title').innerHTML;
+						
+			
+			var layernamept= "null";
+			
+			var colors = [];
+			for (x=0; x<cDynamicLayers.length; x++){
+				
+			colors.push('#'+rgb2hex(document.getElementById("LB"+cDynamicLayers[x].replace(/\s/g, '')).style.background));
+			}
+			
+			var currBasemap = ""
+			map.eachLayer(function (layer) {
+				if(layer.options){
+				if (layer.options.id){
+					currBasemap = layer.options.id.substring(7);
+					if (currBasemap == "streets-satellite"){
+						currBasemap = "satellite"; 
+					}
+	
+				}
+				}
+			});
+			
+
+			
+			$.ajax({
+			  url: "saver.php",
+			  type: "POST",
+			  data: {
+			  filename : cfileNameList,
+			  layernameadm: cDynamicLayers,
+			  OrderList: OrderList,
+			  setname: mapname,
+			  mapid: mapid,
+			  polycolor: colors,
+			  multicolorsArray: MultiColorDefinitions,
+			  zoomLat: map.getCenter().lat,
+			  zoomLong: map.getCenter().lng,
+			  zoomLevel: map.getZoom(), 
+			  owner: document.getElementById('owner').value,
+			  ownerOrg: document.getElementById('ownerOrg').value,
+			  focusCountry: document.getElementById('FocusCountry').value,
+			  about: document.getElementById('about').value,
+			  basemap: currBasemap,
+			  }, success: function(response) {	
+
+				CurrSessionSaved=1; 
+				
+				document.getElementById('accesslink').href=window.location.href.split(/\?|#/)[0]+"?"+mapid+"view";
+				document.getElementById('accesslink').innerHTML=window.location.href.split(/\?|#/)[0]+"?"+mapid+"view";
+				document.getElementById('editlink').href=window.location.href.split(/\?|#/)[0]+"?"+mapid+"edit";
+				document.getElementById('editlink').innerHTML=window.location.href.split(/\?|#/)[0]+"?"+mapid+"edit";
+				document.getElementById('templatelink').href=window.location.href.split(/\?|#/)[0]+"?"+mapid+"template";
+				document.getElementById('templatelink').innerHTML=window.location.href.split(/\?|#/)[0]+"?"+mapid+"template";
+				
+			  }
+			});
+		 
+	}
+	
+	//Function to Add New Lat Long Data to Map
+	function AddLatLongDataToMap(){
+		
+		if(document.getElementById("file2").files[0] == null){
+			alert("Please select a file containing your geographic data");
+		}
+		else if(document.getElementById("inputLayerName").value == ""){
+			alert("Please enter a name for your layer");
+		}
+		else if(document.getElementById("lat").value == "missing"){
+			alert("Please select the field in the table that contains 'Latitude' values");
+		}
+		else if(document.getElementById("long").value == "missing"){
+			alert("Please select the field in the table that contains 'Longitude' values.");
+		}
+		else{
+		
+		
+		for (i = 0; i < MultiColorDefinitions.length; i++) {
+			if(MultiColorDefinitions[i]["LayerName"] == document.getElementById("inputLayerName").value){
+				alert("Your document already contains a layer with this name. Please provide a different name for your layer."); 
+				return; 
+			}
+		}
+				
+		var x = document.getElementById("file2").files[0];
+
+		
+		var t = document.getElementById("file2").files[0].name;
+		var filename = t.substr(0,t.length - 4);
+		filename = filename+"_"+mapid;
+		cfileNameList.push(filename);
+		
+		var lats = document.getElementById("lat");
+		var selectedlats = lats.options[lats.selectedIndex].value;
+		var longss = document.getElementById("long")
+		var selectedlongs = longss.options[longss.selectedIndex].value
+		//console.log(selectedlats);
+		
+		Papa.parse(x, {
+			header: true,
+			dynamicTyping: true,
+			skipEmptyLines: true,
+			complete: function(results) {
+				var csvdata = results.data;
+				//console.log(csvdata);
+												
+				var geojsondata= {"type": "FeatureCollection", "features": []}; 
+				
+				var resultNaNErrors = "<br><br>The following rows were not processed because your selected Latitude or Longitude field contained values that were not numbers. (i.e. contained text):<br>"; 
+				var resultNAErrors = "<br><br>The following records were not processed because your selected Latitude or Longitude field contained blank values:<br>";
+				var resultOBErrors = "<br><br>The following records were not processed because your selected Latitude field contained values greater than 90 or less than -90 OR your Longitude field contained values greater than 180 or less than -180. Decimal Degree Latitude Values will always be between -90 and 90. Decimal Degree Longitude Values will always be between -180 and 180:<br>";
+				var HasNaNEr = 0; 
+				var HasNAEr = 0;
+				var HasOBEr = 0; 
+				var successCSVRecs = 0; 
+				
+				for (var i = 0; i < csvdata.length; i++) {
+					
+					if(isNaN(csvdata[i][selectedlongs])||isNaN(csvdata[i][selectedlats])){
+						//console.log("Error with record: "+i);
+						resultNaNErrors = resultNaNErrors + "Row "+(i+2)+"<br>" 
+						HasNaNEr = 1;
+					}
+					else if(csvdata[i][selectedlongs]==""||csvdata[i][selectedlats]==""){
+						//console.log("Error with record: "+i);
+						resultNAErrors = resultNAErrors + "Row "+(i+2)+"<br>" 
+						HasNAEr = 1; 
+					}
+					else if(isNaN(csvdata[i][selectedlongs])||isNaN(csvdata[i][selectedlats])||csvdata[i][selectedlongs]==""||csvdata[i][selectedlats]==""){
+						//console.log("Error with record: "+i);
+						resultOBErrors = resultOBErrors + "Row "+(i+2)+"<br>" 
+						HasOBEr = 1; 
+					}
+					else{
+					geojsondata.features.push({"type":"Feature","geometry": {"type":"Point","coordinates": [csvdata[i][selectedlongs],csvdata[i][selectedlats]]},"properties":csvdata[i] });
+					successCSVRecs++; 
+					}
+				};	
+				
+				var CSVAddReport = csvdata.length + " Latitude/Longitude records processed. <br>"+ successCSVRecs + " placed on a map."
+				if(successCSVRecs<1){
+					CSVAddReport = CSVAddReport+"<br><br>ERROR: I'm sorry, no records successfully processed. No records will appear on the map."
+				}
+				if(HasNAEr){
+					CSVAddReport = CSVAddReport+resultNAErrors;
+				}
+				if(HasNaNEr){
+					CSVAddReport = CSVAddReport+resultNaNErrors;
+				}
+				if(HasOBEr){
+					CSVAddReport = CSVAddReport+resultOBErrors;
+				}
+				
+				console.log(CSVAddReport);
+				document.getElementById("ResultsDetails").innerHTML = CSVAddReport; 
+				document.getElementById("modalBodyResults").style.maxHeight = window.innerHeight-75+"px";
+				//document.getElementById("ResultsDetails").innerHTML = "A very short modal message"; 
+				$('#ResultsModal').modal('show');
+				
+				if(successCSVRecs<1){
+					return; 
+				}
+				
+				
+				$.ajax({
+				
+					data: {'filename':filename,'data': JSON.stringify(geojsondata)},
+					url: 'datastorePoints_v2.php',
+					method: 'POST',
+					success: function(msg) {
+						
+						function getColor(x) {
+							  switch(x) {
+								case 1:   return  '#b3de69';
+								case 2:   return  '#fdb462';
+								case 0:   return  '#DDDDDD';
+								}					 
+							};
+							
+							var customOptions =
+							{
+							'maxWidth': '500',
+							'minWidth': '100',
+							'className' : 'custom'
+							}
+							
+							function Popup (feature, layer){
+								layer.bindPopup("<div id='popupbanner'>USAID</div><br><div class='popupcontent'><table style='width:100%'><tr><td class='field'><b>Mission: </b></td><td>USAID "+feature.properties.NAME_USAID+"</td></tr><tr><td class='field'><b>Regional: </b></td><td>"+feature.properties.Reg_Miss+"</td></tr></table></div><br>", customOptions); //<tr><th>Firstname</th><th>Lastname</th></tr>
+							};
+							
+							var dynamicColor = '#'+Math.floor(Math.random()*16777215).toString(16);
+							//alert(dynamicColor);
+							var geojsonMarkerOptions = {
+								radius: 4,
+								fillColor: dynamicColor,
+								color: "#333333",
+								weight: 1,
+								opacity: 0.6,
+								fillOpacity: 0.6
+							};
+							
+							 
+							cnumDynamicLayers++; 
+							userLayers[cnumDynamicLayers] = L.geoJson(geojsondata, {
+									pointToLayer: function (feature, latlng) {
+										return L.circleMarker(latlng, geojsonMarkerOptions);
+									},
+									onEachFeature: onEachFeature
+							}).addTo(map);
+							
+							userLayers[cnumDynamicLayers].eachLayer(function(layer){layer.closeTooltip();});
+							
+							layerControl.addOverlay(userLayers[cnumDynamicLayers], document.getElementById("inputLayerName").value);
+							
+							var inputName = document.getElementById("inputLayerName").value;
+							cDynamicLayers.push(inputName);
+							OrderList.push(inputName);
+							
+							console.log(document.getElementById('Legendcontent').offsetWidth);  
+							var LegendWidthFormula = (document.getElementById("inputLayerName").value.length*8)+100;  
+							if(document.getElementById('Legendcontent').offsetWidth < LegendWidthFormula){
+								//document.getElementById('Legendcontent').style.width = LegendWidthFormula+"px"; 
+							}
+							console.log(document.getElementById('Legendcontent').offsetWidth); 
+							
+							var LegendBoxID = "LB"+document.getElementById("inputLayerName").value.replace(/\s/g, '');
+							var existingLegendContent = document.getElementById('Legendcontent').innerHTML;
+							document.getElementById('Legendcontent').innerHTML = '<div class="LegendItem" id="LI'+LegendBoxID+'"><i id="'+LegendBoxID+'" style="background:'+dynamicColor+';border-radius: 50%;width:18px;border-style:solid;border-color:black;border-width:1px;"></i><span id="Lynme'+LegendBoxID+'">'+document.getElementById("inputLayerName").value+'&nbsp; &nbsp; </span><a href="javascript:void(0)" onclick="changeMapSettings(\''+inputName+'\',\''+lgndCnt+'\')"><img src="image/ColorSettings.png" height="15" width="15"></a>    <a href="javascript:void(0)" onclick="RemoveLayer(\''+inputName+'\',\''+lgndCnt+'\')"><img src="image/cancel.jpg"></a></div><br>'+existingLegendContent;
+							
+							
+							
+							lgndCnt++; 
+							
+							MultiColorDefinitions.push({LayerName:inputName, DisplayName:inputName, transparency:0.6, ColorType:"OneColor", DisplayDefaultColor:"TRUE",  DisplayMapLabels:"FALSE", FieldName:"missing", Cat1:"", Cat2:"", Cat3:"", Cat4:"", Cat5:"", Cat1Color:"66C2A5", Cat2Color:"FC8D62", Cat3Color:"8DA0CB", Cat4Color:"E78AC3", Cat5Color:"A6D854", Rng1Low:"", Rng2Low:"", Rng3Low:"", Rng4Low:"", Rng5Low:"", Rng1High:"", Rng2High:"", Rng3High:"", Rng4High:"", Rng5High:"", Rng1Color:"FEF0D9", Rng2Color:"FDCC8A", Rng3Color:"FC8D59", Rng4Color:"E34A33", Rng5Color:"B30000"});
+			
+							
+					}
+				});
+				
+
+				
+				//hide modal
+							 $('#myModal').modal('hide');
+							 
+				
+					if(!document.getElementById('downloadbutton')){
+						
+						$('#buttons').append("<button id='downloadbutton' type='button' class='btn btn-info btn-lg' data-toggle='modal' data-target='#Downloadmodal' onclick='writeDownloadList()'> Download Data </button> <button type='button' id='svButton' class='btn btn-info btn-lg' onclick='showSaveDialog()'>Save Map</button>"); 
+					};
+				
+				
+			}
+		});
+		}//end the else
+	}
+
+	function writeDownloadList(){
+		$('#downloadlist').empty();
+		for(x=0; x<cfileNameList.length; x++){
+			var list = '<li class="list-group-item"><a href="data/output/'+cfileNameList[x]+'.geojson" download>'+cfileNameList[x]+'</a></li>';
+			$('#downloadlist').append(list);
+		};
+	}
+	
+				//Function: Called each time a feature is added to the map. This function populates a popup window with data about the item. The popup is displayed when the item is clicked on the map.
+//bindPopup is a built-in leaflet function.    
+	function onEachFeature(feature, layer) {
+		//console.log("each feature");
+		
+		//console.log("Adding Popup");
+		var popupContent = "";
+
+		if (feature.properties) {
+			for (var key in feature.properties) {
+				popupContent += ('<b>'+key + ':</b> ' + feature.properties[key] + "<br>");
+			}
+				layer.bindPopup(popupContent);
+				var TooltipVal = "";
+				if(feature.properties["NAME_0"] != undefined){
+					//console.log("Name 1" + feature.properties["NAME_1"]);
+					TooltipVal = feature.properties["NAME_0"]; 
+				}
+				if(feature.properties["NAME_1"] != undefined){
+					//console.log("Name 1" + feature.properties["NAME_1"]);
+					TooltipVal = feature.properties["NAME_1"]; 
+				}
+				if (feature.properties["NAME_2"] != undefined){
+					//console.log("Name 2" + feature.properties["NAME_2"]);
+					TooltipVal = feature.properties["NAME_2"]; 
+				}
+				if(feature.properties["label"] != undefined){
+					//console.log("Label" + feature.properties["label"]);
+					TooltipVal = feature.properties["label"]; 
+				}
+				layer.bindTooltip(TooltipVal,{permanent:true, direction:'center', interactive:false});
+
+		}
+
+		
+	}
+
+		
+	function loadExistingMap() {
+				console.log("Loading existing Map"); 
+		$.getJSON("usersettings/templatesettings.json", function(params){							
+				//console.log("Processing JSON");
+				//DEFINE OBJECT TO HOLD Layers
+				//var userLayers = {}; 
+				var numDynamicLayers = 0; 
+				var DynamicLayers = [];
+				var layerBeingModified = 0;
+				var colorprops= [];
+				var fileNameList = [];
+				
+				//ADDITIONAL PARAMETERS TO BE RETRIEVED FROM template JSON file. 
+				var Lat = 9.07; 
+				var Long = 7.49; 
+				var Zoom = 4; 
+				var StringBaseVarName = "dark";
+				
+				//Search through the template settings list, extract and assign map parameters
+				for(x=0; x< params.length; x++){
+					if (params[x].ID==urlid){
+					
+					FoundMap = 1; 
+						document.getElementById("title").innerHTML= params[x].mapname;
+						colorprops = params[x].polycolor; 
+						DynamicLayers = params[x].layernameadmin;
+						OrderList = params[x].OrderList;
+						console.log(OrderList);
+						fileNameList = params[x].filename;
+						
+						MultiColorDefinitions = params[x].multicolor;
+						Lat = params[x].zoomLat;
+						Long= params[x].zoomLong;
+						Zoom= params[x].zoomLevel;
+						if(urlidType == "edit"){
+							document.getElementById('owner').value = params[x].owner;
+							document.getElementById('ownerOrg').value = params[x].ownerOrg;
+							document.getElementById('FocusCountry').value = params[x].focusCountry;
+							document.getElementById('about').value = params[x].about;
+						}
+						StringBaseVarName= params[x].basemap;
+								
+					}
+				}
+				//if(FoundMap == 0){
+					//console.log(window.location.href.split(/\?|#/)[0]);
+				//	alert("I'm sorry, the requested map cannot be found. You will be starting with a new map."); 
+				//	window.location.assign(window.location.href.split(/\?|#/)[0]);
+				//}
+				
+				cfileNameList = fileNameList; 
+				cDynamicLayers = DynamicLayers; 
+				
+				map.setView(new L.LatLng(Lat, Long), Zoom);
+				//map.addLayer("emerald"); 
+				
+					map.removeLayer(light);
+					map.addLayer(eval(StringBaseVarName));
+					
+				//Establish Layer Loading Order based on parameters from OrderList
+				var OrderIDs = []; 
+				console.log("testing order");
+				console.log
+				for(x=0; x< OrderList.length; x++){
+				console.log("OL"+ x +OrderList[x]);
+					for(z=0; z< DynamicLayers.length; z++){
+						console.log("DL"+ z +DynamicLayers[z]);
+						if(OrderList[x]==DynamicLayers[z]){
+							OrderIDs.push(z);
+						}
+					}
+				}
+				console.log(OrderIDs);
+				
+				//Beginning of a custom quasi-for loop. Forces syncronis layer ordering. 
+				//establish a count variable. 
+				var RtnLyLoads = 0;
+				loadALayer(OrderIDs[RtnLyLoads]);
+				//Called by function at end of previous layer load.
+				//If not at end of layer list, load another layer.
+				function TryAnotherLoad(){
+					if(RtnLyLoads < fileNameList.length){
+						loadALayer(OrderIDs[RtnLyLoads]);
+					}
+				}
+				//Function that actually loads the geojson file.
+				function loadALayer_NOTUSED(y){
+						var script= document.createElement('script');
+						script.type = "text/javascript";
+						script.src='data/output/'+fileNameList[y]+".geojson";
+						script.id=y; 
+						//console.log(script);
+						document.getElementById("datahold").appendChild(script);
+						//console.log("it worked!");
+						console.log(y);
+						//console.log(this.id); 
+						script.onload = function() {return LoadLayer(this.id)};
+				}
+				
+				function loadALayer(y){
+							var geojsondata = (function () {
+								var geojsondata = null;
+								$.ajax({
+									'global': false,
+									'url': "data/output/"+fileNameList[y]+".geojson",
+									'dataType': "json",
+									'success': function (data) {
+									geojsondata = data;
+									reloadedGeoJsonData = geojsondata;
+									return LoadLayer(y); 								
+									//return geojsondata;
+									}
+								});
+								
+								
+								
+							})();
+				}
+				
+				//once geojson file loaded, add it to the map.
+				function LoadLayer(src){
+				console.log(src);	
+				
+				if(colorprops[src] == "#"){
+					var dynamicColor = "none";
+				}
+				else{
+					var dynamicColor = colorprops[src];
+				}
+			
+					
+					var geojsonMarkerOptions = {
+										radius: 4,
+										fillColor: dynamicColor,
+										color: "#333333",
+										weight: 1,
+										opacity: 1,
+										fillOpacity: 0.6
+									};
+					
+									
+									if(reloadedGeoJsonData.features[0].geometry.type == "Polygon"||reloadedGeoJsonData.features[0].geometry.type == "MultiPolygon"){
+									//polys
+									cnumDynamicLayers++; 
+									userLayers[cnumDynamicLayers] = L.geoJson(reloadedGeoJsonData,{
+										style: function (feature) {
+											return {
+											 "color": "#464646",
+											 "fillColor": dynamicColor,
+											 "fillOpacity": 0.6,
+											 "opacity": 0.9,
+											 "weight": 1,
+											}},
+											onEachFeature: onEachFeature
+									}).addTo(map);
+									}else{
+									//points
+									cnumDynamicLayers++; 
+									userLayers[cnumDynamicLayers] = L.geoJson(reloadedGeoJsonData, {
+											pointToLayer: function (feature, latlng) {
+												return L.circleMarker(latlng, geojsonMarkerOptions);
+											},
+											onEachFeature: onEachFeature
+									}).addTo(map);
+									}
+									//
+									
+									layerControl.addOverlay(userLayers[cnumDynamicLayers], DynamicLayers[src]);
+									
+									console.log(DynamicLayers[src]);
+									console.log(lgndCnt); 
+									
+									var IsEditable = false; 
+									if(urlidType != "view"){
+										ColorSettingContent = '<a href="javascript:void(0)" onclick="changeMapSettings(\''+DynamicLayers[src]+'\',\''+lgndCnt+'\')"><img src="image/ColorSettings.png" height="15" width="15"></a>    <a href="javascript:void(0)" onclick="RemoveLayer(\''+DynamicLayers[src]+'\',\''+lgndCnt+'\')"><img src="image/cancel.jpg"></a>';
+										IsEditable = true;  
+									}
+									
+									console.log(document.getElementById('Legendcontent').offsetWidth);  
+									var LegendWidthFormula = (DynamicLayers[src].length*8)+100;  
+									if(document.getElementById('Legendcontent').offsetWidth < LegendWidthFormula){
+										
+									}
+									console.log(document.getElementById('Legendcontent').offsetWidth); 
+									
+									
+									if(reloadedGeoJsonData.features[0].geometry.type == "Polygon"||reloadedGeoJsonData.features[0].geometry.type == "MultiPolygon"){
+									var LegendBoxID = "LB"+DynamicLayers[src].replace(/\s/g, '');
+									var existingLegendContent = document.getElementById('Legendcontent').innerHTML; 
+									document.getElementById('Legendcontent').innerHTML = '<div class="LegendItem" id="LI'+LegendBoxID+'"><i id="'+LegendBoxID+'" style="background: '+dynamicColor+'"></i><span id="Lynme'+LegendBoxID+'">'+DynamicLayers[src]+'&nbsp; &nbsp; </span>'+(IsEditable ? ColorSettingContent : '')+'</div><br>'+existingLegendContent;
+									}
+									else{
+									var LegendBoxID = "LB"+DynamicLayers[src].replace(/\s/g, '');
+									var existingLegendContent = document.getElementById('Legendcontent').innerHTML;
+									document.getElementById('Legendcontent').innerHTML = '<div class="LegendItem" id="LI'+LegendBoxID+'"><i id="'+LegendBoxID+'" style="background:'+dynamicColor+';border-radius: 50%;width:18px;border-style:solid;border-color:black;border-width:1px;"></i><span id="Lynme'+LegendBoxID+'">'+DynamicLayers[src]+'&nbsp; &nbsp; </span>'+(IsEditable ? ColorSettingContent : '')+'</div><br>'+existingLegendContent;
+									}
+									
+									console.log("Attempting to load "+DynamicLayers[src]+"--"+src); 
+									
+									$.when( changeMapSettings(DynamicLayers[src],lgndCnt,"LoadPrevious") ).done(function() {
+										console.log(DynamicLayers[src]+" is done loading"+src);
+										RtnLyLoads++;
+										lgndCnt++;
+										TryAnotherLoad(RtnLyLoads);
+									});
+
+
+									
+							//Add Download Data Button		
+							if(!document.getElementById('downloadbutton')&&urlidType != "view"){
+								 $('#buttons').append("<button id='downloadbutton' type='button' class='btn btn-info btn-lg' data-toggle='modal' data-target='#Downloadmodal' onclick='writeDownloadList()'> Download Data </button> <button type='button' id='svButton' class='btn btn-info btn-lg' onclick='showSaveDialog()'>Save Map</button>"); //  
+							};
+							
+						return;	
+						//}//end of onload
+						}//end of LoadLayer function
+					
+				
+		}); 
+	}
+	
+</script>
+</body>
+
+</html>

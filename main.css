@@ -1,0 +1,134 @@
+#map { 
+		height: 850px; 
+		margin-top: 0;
+		margin-left: 1%;
+		margin-right: 1%;
+		margin-bottom: 1%;
+		border-style: solid;
+		border-width: 1px;
+		}
+		#mapframe{
+			border-style: solid;
+			border-width: 2px;
+		}
+		.header{
+			/*border: dotted;*/
+			margin-right: 1%;
+			margin-top: 1%;
+		}
+		.subheader{
+			text-align: right;
+			font-size: 15px;
+			color: red;
+			margin-right: 1%;
+		}
+		.usaidlogo{
+			
+			vertical-align: middle;
+		}
+		#GeoCenterlogo{
+			
+			float: right;
+			
+			
+		}
+		#title{
+			margin: auto;
+			vertical-align: middle;
+			font-size: 45px;
+			font-weight: bold;
+			padding-left: 2%
+		}
+		.legend {
+			text-align: left;
+			line-height: 18px;
+			color: #555;
+			Background-color: white;
+			border-style: solid;
+			border-color: #002A6C;
+			padding: 0;
+			padding-top:0;
+			
+			width: 105%;
+		}
+		.legend i {
+			width: 25px;
+			height: 18px;
+			float: left;
+			margin-right: 8px;
+			opacity: 0.7;
+			
+		}
+		#legendbanner{
+			Background-color: #002A6C;
+			border-style: solid;
+			border-color: #002A6C;
+			height: 25px;
+			color: white;
+			text-align: center;
+			padding-top: 1%;
+			vertical-align: middle;
+			font-size: 15px
+		}
+		#Legendcontent{
+			padding: 5%;
+			padding-top:0;
+			
+		}
+		.USAIDred{
+			color: #C2113A;
+			font-family: 'Gill Sans', 'Gill Sans MT', Calibri, sans-serif;
+		}
+		.USAIDblue{
+			color: #002A6C;
+			font-family: 'Gill Sans', 'Gill Sans MT', Calibri, sans-serif;
+		}
+		.custom .leaflet-popup-tip,
+		.custom .leaflet-popup-content-wrapper {
+			background: #002A6C;
+			color: #ffffff;
+			width: 300px;
+			padding-bottom: 0;
+		}
+		.popupcontent{
+			background: white;
+			color: black;
+			padding: 5%;
+			border-radius: 5px;	
+			
+		}
+		.field{
+			width:35%;
+		}
+		.attribute{
+			float: right;
+			text-align: right
+		}
+		#popupbanner{
+			text-align:center;
+			font-weight: bold;
+			padding: 0 0;
+		}
+		.info {
+			
+			padding: 6px 8px;
+			font: 14px/16px Arial, Helvetica, sans-serif;
+			background: white;
+			background: rgba(255,255,255,0.8);
+			box-shadow: 0 0 15px rgba(0,0,0,0.2);
+			border-radius: 5px;
+		}
+		.info h4 {
+			margin: 0 0 5px;
+			color: #777;
+		}
+		body{
+	font-family: Raleway, "Helvetica Neue", Helvetica, Roboto, Arial, sans-serif;
+}
+.row{
+	padding-top: 2%;
+	padding-bottom: 2%
+}
+.geobuttons{
+	color: white;
+}
